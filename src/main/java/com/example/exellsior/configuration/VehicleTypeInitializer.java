@@ -48,6 +48,8 @@ public class VehicleTypeInitializer {
                 new VehicleType("Mercedes Benz GLA", "SUV", 40000),
                 new VehicleType("Mercedes Benz GLC", "SUV", 40000),
                 new VehicleType("Chery Tiggo", "SUV", 40000),
+                new VehicleType("Honda HRV", "SUV", 40000),
+                new VehicleType("Toyota Rav4", "SUV", 40000),
 
                 // PICKUP - $70.000
                 new VehicleType("Mercedes Benz GLE", "PICKUP", 70000),
@@ -57,7 +59,7 @@ public class VehicleTypeInitializer {
                 new VehicleType("Nissan Frontier", "PICKUP", 70000),
                 new VehicleType("Toyota Hilux", "PICKUP", 70000),
                 new VehicleType("Toyota SW4", "PICKUP", 70000),
-                new VehicleType("Toyota Rav4", "PICKUP", 70000),
+                //new VehicleType("Toyota Rav4", "PICKUP", 70000),
                 new VehicleType("Volkswagen Amarok", "PICKUP", 70000),
                 new VehicleType("Jeep Grand Cherokee", "PICKUP", 70000),
                 new VehicleType("Audi Q7", "PICKUP", 70000),
@@ -98,7 +100,7 @@ public class VehicleTypeInitializer {
                 new VehicleType("Volkswagen Polo", "AUTO", 35000),
                 new VehicleType("Volkswagen Virtus", "AUTO", 35000),
                 new VehicleType("Ford Ka", "AUTO", 35000),
-                new VehicleType("Honda HRV", "AUTO", 35000),
+                //new VehicleType("Honda HRV", "AUTO", 35000),
                 new VehicleType("Honda Civic", "AUTO", 35000),
                 new VehicleType("Audi A3", "AUTO", 35000),
                 new VehicleType("Audi A4", "AUTO", 35000),
@@ -126,7 +128,14 @@ public class VehicleTypeInitializer {
                 new VehicleType("Citroën C4", "AUTO", 35000),
                 new VehicleType("Citroën Cactus", "AUTO", 35000),
                 new VehicleType("Citroën Basalt", "AUTO", 35000),
-                new VehicleType("Hyundai Kona", "AUTO", 35000)
+                new VehicleType("Hyundai Kona", "AUTO", 35000),
+                new VehicleType("Peugeot 308", "AUTO", 35000),
+                new VehicleType("VW Fox", "AUTO", 35000),
+                new VehicleType("Ford Mondeo", "AUTO", 35000),
+                new VehicleType("Chevrolet Aguile", "AUTO", 35000),
+                new VehicleType("Ford Fiesta 308", "AUTO", 35000),
+                new VehicleType("Peugeot 207", "AUTO", 35000),
+                new VehicleType("Suzuki Jimmy", "AUTO", 35000)
         );
 
         // Solo cargar si la tabla está vacía

@@ -243,7 +243,7 @@ public class ClientService {
     }
 
     @Transactional
-    public void releaseSpace(String spaceKey) {
+    public void releaseSpace1(String spaceKey) {
         Space space = spaceRepository.findById(spaceKey)
                 .orElseThrow(() -> new RuntimeException("Espacio no encontrado: " + spaceKey));
 
@@ -262,7 +262,35 @@ public class ClientService {
     }
 
     @Transactional
-    public void resetAllData() {
+    public void releaseSpace(String spaceKey) {
+        Space space = spaceRepository.findById(spaceKey)
+                .orElseThrow(() -> new RuntimeException("Espacio no encontrado: " + spaceKey));
+
+        Long clientId = space.getClientId();
+
+        // Liberar espacio
+        space.setOccupied(false);
+        space.setHold(false);
+        space.setClientId(null);
+        space.setStartTime(null);
+        spaceRepository.save(space);
+
+        if (clientId != null) {
+            Client client = clientRepository.findById(clientId)
+                    .orElseThrow(() -> new RuntimeException("Cliente no encontrado"));
+
+           // client.setSpaceKey(null);
+            client.setExitTimestamp(System.currentTimeMillis());  // ← REGISTRAR FECHA DE SALIDA
+
+            // NO limpiar otros datos (price, vehicle, etc.)
+            clientRepository.save(client);
+        }
+
+        System.out.println("Espacio liberado. Cliente " + clientId + " marcado con exitTimestamp");
+    }
+
+    @Transactional
+    public void resetAllData1() {
         // 1. Liberar todos los espacios
         List<Space> allSpaces = spaceRepository.findAll();
         allSpaces.forEach(space -> {
@@ -289,6 +317,31 @@ public class ClientService {
         clientRepository.saveAll(allClients);
 
         System.out.println("Cierre del día completado: espacios liberados y datos de reserva limpiados en todos los clientes");
+    }
+
+
+    @Transactional
+    public void resetAllData() {
+        // 1. Liberar todos los espacios
+        List<Space> allSpaces = spaceRepository.findAll();
+        allSpaces.forEach(space -> {
+            space.setOccupied(false);
+            space.setHold(false);
+            space.setClientId(null);
+            space.setStartTime(null);
+        });
+        spaceRepository.saveAll(allSpaces);
+
+        // 2. SOLO resetear spaceKey en los clientes (nada más)
+        List<Client> allClients = clientRepository.findAll();
+        allClients.forEach(client -> {
+            client.setSpaceKey(null);  // ← ÚNICA propiedad que se limpia
+            client.setEntryTimestamp(null);
+            client.setExitTimestamp(System.currentTimeMillis());
+        });
+        clientRepository.saveAll(allClients);
+
+        System.out.println("Cierre del día completado: espacios liberados y spaceKey reseteado en clientes");
     }
 
 }

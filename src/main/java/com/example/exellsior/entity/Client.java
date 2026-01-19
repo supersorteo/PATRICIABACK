@@ -55,6 +55,9 @@ public class Client {
     @Column(name = "entry_timestamp")
     private Date entryTimestamp;
 
+    @Column(name = "exit_timestamp")
+    private Long exitTimestamp;
+
     public Client() {}
 
     public Long getId() {
@@ -184,4 +187,7 @@ public class Client {
     public void setEntryTimestamp(Date entryTimestamp) {
         this.entryTimestamp = entryTimestamp;
     }
+
+    public Long getExitTimestamp() { return exitTimestamp; }
+    public void setExitTimestamp(Long exitTimestamp) { this.exitTimestamp = exitTimestamp; }
 }
