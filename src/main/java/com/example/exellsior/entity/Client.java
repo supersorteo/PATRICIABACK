@@ -58,6 +58,9 @@ public class Client {
     @Column(name = "exit_timestamp")
     private Long exitTimestamp;
 
+    @Column(name = "last_day_closed")
+    private Long lastDayClosed;
+
     public Client() {}
 
     public Long getId() {
@@ -190,4 +193,7 @@ public class Client {
 
     public Long getExitTimestamp() { return exitTimestamp; }
     public void setExitTimestamp(Long exitTimestamp) { this.exitTimestamp = exitTimestamp; }
+
+    public Long getLastDayClosed() { return lastDayClosed; }
+    public void setLastDayClosed(Long lastDayClosed) { this.lastDayClosed = lastDayClosed; }
 }
