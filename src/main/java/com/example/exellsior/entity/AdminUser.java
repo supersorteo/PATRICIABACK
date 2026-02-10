@@ -14,11 +14,22 @@ public class AdminUser {
     @Column(unique = true, nullable = false)
     private String username;
 
-    //@Column(nullable = false)
-    //private String passwordHash;
+    @Column(name = "password_hash", nullable = false)
+    private String passwordHash;
 
-    @Column(nullable = false)
-    private String password;
+    //@Column(nullable = false)
+    //private String password;
+
+    public AdminUser() {
+    }
+
+    public AdminUser(Long id, String username, String passwordHash) {
+        this.id = id;
+        this.username = username;
+        this.passwordHash = passwordHash;
+    }
+
+
 
     public Long getId() {
         return id;
@@ -36,17 +47,17 @@ public class AdminUser {
         this.username = username;
     }
 
-   /* public String getPasswordHash() {
+    public String getPasswordHash() {
         return passwordHash;
     }
 
     public void setPasswordHash(String passwordHash) {
         this.passwordHash = passwordHash;
-    }*/
+    }
 
 
-    public String getPassword() { return password; }
-    public void setPassword(String password) { this.password = password; }
+    /*public String getPassword() { return password; }
+    public void setPassword(String password) { this.password = password; }*/
 
 
 }

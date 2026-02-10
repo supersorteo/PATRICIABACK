@@ -22,17 +22,31 @@ public class AuthController {
     @Autowired
     private AdminUserRepository adminUserRepository;
 
+
+
     @PostMapping("/register")
     public ResponseEntity<String> register(@RequestBody Map<String, String> body) {
+        String username = body.get("username");
+        String password = body.get("password");
+
+        if (username == null || password == null) {
+            return ResponseEntity.badRequest().body("Username y password son obligatorios");
+        }
+
         try {
-            authService.register(body.get("username"), body.get("password"));
-            return ResponseEntity.ok("Usuario creado");
-        } catch (Exception e) {
+            authService.register(username, password);
+            return ResponseEntity.ok("Usuario creado exitosamente");
+        } catch (RuntimeException e) {
+            if (e.getMessage().contains("Ya existe")) {
+                return ResponseEntity.status(409).body("Ya existe un usuario administrador"); // 409 Conflict
+            }
             return ResponseEntity.badRequest().body(e.getMessage());
         }
     }
 
-    @PostMapping("/login")
+
+
+    /*@PostMapping("/login")
     public ResponseEntity<String> login(@RequestBody Map<String, String> body) {
         try {
             authService.login(body.get("username"), body.get("password"));
@@ -40,12 +54,34 @@ public class AuthController {
         } catch (Exception e) {
             return ResponseEntity.status(401).body(e.getMessage());
         }
+    }*/
+
+    @PostMapping("/login")
+    public ResponseEntity<Map<String, String>> login(@RequestBody Map<String, String> body) {
+        try {
+            String token = authService.login(body.get("username"), body.get("password"));
+            return ResponseEntity.ok(Map.of("token", token));
+        } catch (Exception e) {
+            return ResponseEntity.status(401).body(Map.of("error", e.getMessage()));
+        }
     }
 
-    @PostMapping("/change-password")
+   /* @PostMapping("/change-password")
     public ResponseEntity<String> changePassword(@RequestBody Map<String, String> body) {
         try {
             authService.changePassword(body.get("username"), body.get("oldPassword"), body.get("newPassword"));
+            return ResponseEntity.ok("Contraseña cambiada");
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(e.getMessage());
+        }
+    }*/
+
+    @PostMapping("/change-password")
+    public ResponseEntity<String> changePassword(@RequestHeader("Authorization") String authHeader,
+                                                 @RequestBody Map<String, String> body) {
+        try {
+            String token = authHeader.replace("Bearer ", "");
+            authService.changePassword(token, body.get("oldPassword"), body.get("newPassword"));
             return ResponseEntity.ok("Contraseña cambiada");
         } catch (Exception e) {
             return ResponseEntity.badRequest().body(e.getMessage());
@@ -58,6 +94,17 @@ public class AuthController {
         List<AdminUser> users = adminUserRepository.findAll();
         return ResponseEntity.ok(users);
     }
+
+   /* @GetMapping("/users")
+    public ResponseEntity<?> getAllUsers(@RequestHeader("Authorization") String authHeader) {
+        try {
+            String token = authHeader.replace("Bearer ", "");
+            List<AdminUser> users = authService.getAllUsers(token);
+            return ResponseEntity.ok(users);
+        } catch (Exception e) {
+            return ResponseEntity.status(401).body("No autorizado: " + e.getMessage());
+        }
+    }*/
 
     // GET usuario por ID (devuelve TODO, incluyendo contraseña en texto plano)
     @GetMapping("/users/{id}")
@@ -83,4 +130,16 @@ public class AuthController {
             return ResponseEntity.badRequest().body("Error al eliminar el usuario: " + e.getMessage());
         }
     }
+
+    /*@DeleteMapping("/users/{id}")
+    public ResponseEntity<String> deleteUser(@RequestHeader("Authorization") String authHeader,
+                                             @PathVariable Long id) {
+        try {
+            String token = authHeader.replace("Bearer ", "");
+            authService.deleteUser(token, id);
+            return ResponseEntity.ok("Usuario eliminado correctamente");
+        } catch (Exception e) {
+            return ResponseEntity.status(401).body("No autorizado: " + e.getMessage());
+        }
+    }*/
 }
