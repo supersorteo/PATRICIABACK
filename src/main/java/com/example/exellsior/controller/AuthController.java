@@ -56,11 +56,21 @@ public class AuthController {
         }
     }*/
 
-    @PostMapping("/login")
+    /*@PostMapping("/login")
     public ResponseEntity<Map<String, String>> login(@RequestBody Map<String, String> body) {
         try {
             String token = authService.login(body.get("username"), body.get("password"));
             return ResponseEntity.ok(Map.of("token", token));
+        } catch (Exception e) {
+            return ResponseEntity.status(401).body(Map.of("error", e.getMessage()));
+        }
+    }*/
+
+    @PostMapping("/login")
+    public ResponseEntity<Map<String, String>> login(@RequestBody Map<String, String> body) {
+        try {
+            Map<String, String> response = authService.login(body.get("username"), body.get("password"));
+            return ResponseEntity.ok(response);
         } catch (Exception e) {
             return ResponseEntity.status(401).body(Map.of("error", e.getMessage()));
         }

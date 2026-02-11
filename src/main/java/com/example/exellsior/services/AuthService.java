@@ -95,7 +95,7 @@ public class AuthService {
         adminUserRepository.save(user);
     }
 
-    public String login(String username, String password) {
+   /* public String login(String username, String password) {
         Optional<AdminUser> userOpt = adminUserRepository.findByUsername(username);
         if (userOpt.isEmpty() || !passwordEncoder.matches(password, userOpt.get().getPasswordHash())) {
             throw new RuntimeException("Usuario o contraseña incorrectos");
@@ -106,6 +106,22 @@ public class AuthService {
         activeSessions.put(token, username);
 
         return token;
+
+    }*/
+
+    public Map<String, String> login(String username, String password) {
+        Optional<AdminUser> userOpt = adminUserRepository.findByUsername(username);
+        if (userOpt.isEmpty() || !passwordEncoder.matches(password, userOpt.get().getPasswordHash())) {
+            throw new RuntimeException("Usuario o contraseña incorrectos");
+        }
+
+        String token = UUID.randomUUID().toString();
+        activeSessions.put(token, username);
+
+        return Map.of(
+                "token", token,
+                "username", username  // ← Agregamos esto
+        );
     }
 
     @Transactional
