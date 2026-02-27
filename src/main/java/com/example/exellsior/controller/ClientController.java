@@ -6,6 +6,8 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.time.YearMonth;
+import java.time.ZoneId;
 import java.util.List;
 import java.util.Map;
 
@@ -21,6 +23,35 @@ public class ClientController {
         return clientService.getAllClients();
     }
 
+
+    @GetMapping("/unique")
+    public ResponseEntity<List<Client>> getUniqueClients() {
+        return ResponseEntity.ok(clientService.getUniqueClients());
+    }
+
+    @GetMapping("/dni/{dni}/monthly-count")
+    public ResponseEntity<Long> getMonthlyCountByDni(
+            @PathVariable String dni,
+            @RequestParam(required = false) String month
+    ) {
+        YearMonth ym = (month == null || month.isBlank())
+                ? YearMonth.now(ZoneId.of("America/Argentina/Buenos_Aires"))
+                : YearMonth.parse(month); // yyyy-MM
+
+        return ResponseEntity.ok(clientService.getMonthlyServiceCountByDni(dni, ym));
+    }
+
+    @PostMapping("/monthly-counts")
+    public ResponseEntity<Map<String, Long>> getMonthlyCountsByDnis(
+            @RequestBody List<String> dnis,
+            @RequestParam(required = false) String month
+    ) {
+        YearMonth ym = (month == null || month.isBlank())
+                ? YearMonth.now(ZoneId.of("America/Argentina/Buenos_Aires"))
+                : YearMonth.parse(month); // yyyy-MM
+
+        return ResponseEntity.ok(clientService.getMonthlyServiceCountsByDnis(dnis, ym));
+    }
 
 
 
@@ -38,14 +69,14 @@ public class ClientController {
         return ResponseEntity.ok(client);
     }
 
-    /*@GetMapping("/dni-list/{dni}")
-    public ResponseEntity<List<Client>> getByDniList(@PathVariable String dni) {
-        List<Client> clients = clientService.findByDni(dni);
-        if (clients.isEmpty()) {
-            return ResponseEntity.notFound().build();
-        }
-        return ResponseEntity.ok(clients);
-    }*/
+    @GetMapping("/dni/{dni}/reservas")
+    public ResponseEntity<List<Client>> getReservationsByDni(@PathVariable String dni) {
+        List<Client> reservations = clientService.getReservationsByDni(dni);
+
+        return ResponseEntity.ok(reservations);
+    }
+
+
 
 
 
@@ -57,14 +88,7 @@ public class ClientController {
 
 
 
-    /*@PutMapping("/{id}")
-    public Client update(@PathVariable Long id, @RequestBody Client updatedClient) {
-        // Validamos que el cliente exista
-        clientService.getById(id);
 
-        updatedClient.setId(id);
-        return clientService.saveClient(updatedClient);
-    }*/
 
     @PutMapping("/{id}")
     public Client update(@PathVariable Long id, @RequestBody Map<String, Object> updates) {

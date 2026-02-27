@@ -10,6 +10,7 @@ D:\DANILO\exellsiorFront\exellsior\exellsior\src\main\java\com\example\exellsior
 D:\DANILO\exellsiorFront\exellsior\exellsior\src\main\java\com\example\exellsior\controller\VehicleTypeController.java
 D:\DANILO\exellsiorFront\exellsior\exellsior\src\main\java\com\example\exellsior\entity\AdminUser.java
 D:\DANILO\exellsiorFront\exellsior\exellsior\src\main\java\com\example\exellsior\entity\Client.java
+D:\DANILO\exellsiorFront\exellsior\exellsior\src\main\java\com\example\exellsior\entity\ClientVehicle.java
 D:\DANILO\exellsiorFront\exellsior\exellsior\src\main\java\com\example\exellsior\entity\Report.java
 D:\DANILO\exellsiorFront\exellsior\exellsior\src\main\java\com\example\exellsior\entity\Space.java
 D:\DANILO\exellsiorFront\exellsior\exellsior\src\main\java\com\example\exellsior\entity\Subsuelo.java
@@ -17,6 +18,7 @@ D:\DANILO\exellsiorFront\exellsior\exellsior\src\main\java\com\example\exellsior
 D:\DANILO\exellsiorFront\exellsior\exellsior\src\main\java\com\example\exellsior\ExellsiorApplication.java
 D:\DANILO\exellsiorFront\exellsior\exellsior\src\main\java\com\example\exellsior\repository\AdminUserRepository.java
 D:\DANILO\exellsiorFront\exellsior\exellsior\src\main\java\com\example\exellsior\repository\ClientRepository.java
+D:\DANILO\exellsiorFront\exellsior\exellsior\src\main\java\com\example\exellsior\repository\ClientVehicleRepository.java
 D:\DANILO\exellsiorFront\exellsior\exellsior\src\main\java\com\example\exellsior\repository\ReportRepository.java
 D:\DANILO\exellsiorFront\exellsior\exellsior\src\main\java\com\example\exellsior\repository\SpaceRepository.java
 D:\DANILO\exellsiorFront\exellsior\exellsior\src\main\java\com\example\exellsior\repository\SubsueloRepository.java

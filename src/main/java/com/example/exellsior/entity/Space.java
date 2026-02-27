@@ -27,7 +27,7 @@ public class Space {
     private Long clientId;
 
 
-   // @Column(name = "client_id")
+    // @Column(name = "client_id")
     //private String clientId;
 
     @Column(name = "start_time")

@@ -2,6 +2,7 @@ com\example\exellsior\controller\VehicleTypeController.class
 com\example\exellsior\controller\SpaceController.class
 com\example\exellsior\controller\SubsueloController.class
 com\example\exellsior\entity\Subsuelo.class
+com\example\exellsior\services\ReportService$2.class
 com\example\exellsior\configuration\CorsConfig$1.class
 com\example\exellsior\services\SubsueloService.class
 com\example\exellsior\entity\VehicleType.class
@@ -10,6 +11,8 @@ com\example\exellsior\repository\AdminUserRepository.class
 com\example\exellsior\services\SpaceService.class
 com\example\exellsior\controller\ReportController.class
 com\example\exellsior\repository\ReportRepository.class
+com\example\exellsior\repository\ClientVehicleRepository.class
+com\example\exellsior\entity\ClientVehicle.class
 com\example\exellsior\ExellsiorApplication.class
 com\example\exellsior\configuration\BCrypt.class
 com\example\exellsior\configuration\UserResponse.class
@@ -20,8 +23,10 @@ com\example\exellsior\controller\AuthController.class
 com\example\exellsior\configuration\CorsConfig.class
 com\example\exellsior\services\AuthService.class
 com\example\exellsior\services\ClientService.class
+com\example\exellsior\services\ReportService$3.class
 com\example\exellsior\entity\Client.class
 com\example\exellsior\entity\Space.class
+com\example\exellsior\services\ReportService$1.class
 com\example\exellsior\entity\AdminUser.class
 com\example\exellsior\repository\SpaceRepository.class
 com\example\exellsior\services\ReportService.class

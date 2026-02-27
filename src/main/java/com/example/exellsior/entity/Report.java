@@ -15,6 +15,12 @@ public class Report {
     @Column(nullable = false)
     private String timestamp; // ISO string from frontend
 
+    @Column(name = "period_type", nullable = false)
+    private String periodType; // DAILY | MONTHLY
+
+    @Column(name = "period_key", nullable = false)
+    private String periodKey; // DAILY: yyyy-MM-dd | MONTHLY: yyyy-MM
+
     @Column(name = "total_spaces")
     private int totalSpaces;
 
@@ -39,6 +45,16 @@ public class Report {
     @Column(length = Integer.MAX_VALUE, name = "filtered_clients") // Fuerza LONGTEXT para array largo
     private String filteredClients;
 
+    @Lob
+    @Column(length = Integer.MAX_VALUE, name = "payment_amounts")
+    private String paymentAmounts;
+
+    @Column(name = "total_cobrado")
+    private Long totalCobrado;
+
+    @Column(name = "daily_final")
+    private Boolean dailyFinal = false;
+
     public Long getId() {
         return id;
     }
@@ -54,6 +70,13 @@ public class Report {
     public void setTimestamp(String timestamp) {
         this.timestamp = timestamp;
     }
+
+
+    public String getPeriodType() { return periodType; }
+    public void setPeriodType(String periodType) { this.periodType = periodType; }
+    public String getPeriodKey() { return periodKey; }
+    public void setPeriodKey(String periodKey) { this.periodKey = periodKey; }
+
 
     public int getTotalSpaces() {
         return totalSpaces;
@@ -109,5 +132,29 @@ public class Report {
 
     public void setFilteredClients(String filteredClients) {
         this.filteredClients = filteredClients;
+    }
+
+    public String getPaymentAmounts() {
+        return paymentAmounts;
+    }
+
+    public void setPaymentAmounts(String paymentAmounts) {
+        this.paymentAmounts = paymentAmounts;
+    }
+
+    public Long getTotalCobrado() {
+        return totalCobrado;
+    }
+
+    public void setTotalCobrado(Long totalCobrado) {
+        this.totalCobrado = totalCobrado;
+    }
+
+    public Boolean getDailyFinal() {
+        return dailyFinal;
+    }
+
+    public void setDailyFinal(Boolean dailyFinal) {
+        this.dailyFinal = dailyFinal;
     }
 }
