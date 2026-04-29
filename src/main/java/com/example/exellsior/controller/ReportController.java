@@ -1,5 +1,6 @@
 package com.example.exellsior.controller;
 
+import com.example.exellsior.dto.PagedResponse;
 import com.example.exellsior.entity.Report;
 import com.example.exellsior.services.ReportService;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -42,6 +43,16 @@ public class ReportController {
     public ResponseEntity<List<Report>> getAllReports() {
         List<Report> reports = reportService.getAllReports();
         return ResponseEntity.ok(reports);
+    }
+
+    @GetMapping("/page")
+    public ResponseEntity<PagedResponse<Report>> getReportsPage(
+            @RequestParam(defaultValue = "0") Integer page,
+            @RequestParam(defaultValue = "20") Integer size,
+            @RequestParam(required = false) String periodType,
+            @RequestParam(required = false) String search
+    ) {
+        return ResponseEntity.ok(reportService.getReportsPage(periodType, search, page, size));
     }
 
     @GetMapping("/{id}")

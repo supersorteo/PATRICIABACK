@@ -28,6 +28,7 @@ com\example\exellsior\entity\Client.class
 com\example\exellsior\entity\Space.class
 com\example\exellsior\services\ReportService$1.class
 com\example\exellsior\entity\AdminUser.class
+com\example\exellsior\dto\PagedResponse.class
 com\example\exellsior\repository\SpaceRepository.class
 com\example\exellsior\services\ReportService.class
 com\example\exellsior\repository\ClientRepository.class

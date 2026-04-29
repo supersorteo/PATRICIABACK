@@ -1,5 +1,6 @@
 package com.example.exellsior.services;
 
+import com.example.exellsior.dto.PagedResponse;
 import com.example.exellsior.entity.Client;
 import com.example.exellsior.entity.Report;
 import com.example.exellsior.repository.ClientRepository;
@@ -9,6 +10,9 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.context.event.ApplicationReadyEvent;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import com.example.exellsior.entity.Space;
@@ -82,6 +86,27 @@ public class ReportService {
 
     public List<Report> getAllReports() {
         return reportRepository.findAll();
+    }
+
+    public PagedResponse<Report> getReportsPage(String periodType, String search, Integer page, Integer size) {
+        int safePage = Math.max(page != null ? page : 0, 0);
+        int safeSize = Math.min(Math.max(size != null ? size : 20, 1), 100);
+
+        Page<Report> result = reportRepository.findPageByFilters(
+                periodType != null ? periodType.trim() : "",
+                search != null ? search.trim() : "",
+                PageRequest.of(safePage, safeSize, Sort.by(Sort.Direction.DESC, "id"))
+        );
+
+        return new PagedResponse<>(
+                result.getContent(),
+                result.getNumber(),
+                result.getSize(),
+                result.getTotalElements(),
+                result.getTotalPages(),
+                result.isFirst(),
+                result.isLast()
+        );
     }
 
     public Optional<Report> getReportById(Long id) {
@@ -512,12 +537,8 @@ public class ReportService {
         }
 
         // 5) Snapshot de espacios al momento del cierre
-        List<Space> spaces = spaceRepository.findAll();
-        int totalSpaces = spaces.size();
-        int occupiedSpaces = 0;
-        for (Space s : spaces) {
-            if (s.isOccupied()) occupiedSpaces++;
-        }
+        int totalSpaces = Math.toIntExact(spaceRepository.count());
+        int occupiedSpaces = Math.toIntExact(spaceRepository.countByOccupiedTrue());
         int freeSpaces = totalSpaces - occupiedSpaces;
         int occupancyRate = totalSpaces > 0 ? Math.round((occupiedSpaces * 100f) / totalSpaces) : 0;
 
@@ -684,13 +705,7 @@ public class ReportService {
         LocalDate today = LocalDate.now(zone);
         long todayStartMs = today.atStartOfDay(zone).toInstant().toEpochMilli();
 
-        List<com.example.exellsior.entity.Space> spaces = spaceRepository.findAll();
-
-        boolean staleOccupied = spaces.stream().anyMatch(s ->
-                s.isOccupied() &&
-                        s.getStartTime() != null &&
-                        s.getStartTime() < todayStartMs
-        );
+        boolean staleOccupied = spaceRepository.existsByOccupiedTrueAndStartTimeLessThan(todayStartMs);
 
         // Si arranca app y no hay nada pendiente, no hacer nada
         if ("STARTUP".equals(source) && !staleOccupied) {
@@ -729,16 +744,9 @@ public class ReportService {
 
 
     private LocalDate getLastClosedDayFromClients(ZoneId zone) {
-        List<Client> clients = clientRepository.findAll();
+        Long maxLastDayClosedMs = clientRepository.findMaxLastDayClosed();
 
-        long maxLastDayClosedMs = 0L;
-        for (Client c : clients) {
-            if (c.getLastDayClosed() != null && c.getLastDayClosed() > maxLastDayClosedMs) {
-                maxLastDayClosedMs = c.getLastDayClosed();
-            }
-        }
-
-        if (maxLastDayClosedMs <= 0L) return null;
+        if (maxLastDayClosedMs == null || maxLastDayClosedMs <= 0L) return null;
 
         return new Date(maxLastDayClosedMs).toInstant().atZone(zone).toLocalDate();
     }

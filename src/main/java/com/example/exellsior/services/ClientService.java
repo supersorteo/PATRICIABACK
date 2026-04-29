@@ -1,5 +1,6 @@
 package com.example.exellsior.services;
 
+import com.example.exellsior.dto.PagedResponse;
 import com.example.exellsior.entity.Client;
 import com.example.exellsior.entity.ClientVehicle;
 import com.example.exellsior.entity.Space;
@@ -7,8 +8,12 @@ import com.example.exellsior.entity.VehicleType;
 import com.example.exellsior.repository.ClientRepository;
 import com.example.exellsior.repository.SpaceRepository;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.http.HttpStatus;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.time.LocalDate;
 import java.time.YearMonth;
@@ -33,7 +38,7 @@ public class ClientService {
 
     public Client getById(Long id) {
         return clientRepository.findById(id)
-                .orElseThrow(() -> new RuntimeException("Cliente no encontrado"));
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Cliente no encontrado"));
     }
 
     private List<VehicleType> resolveVehicleTypes(List<VehicleType> input) {
@@ -155,24 +160,14 @@ public class ClientService {
     @Transactional
     public void deleteClient(Long id) {
         Client client = getById(id);
+        List<Client> clientsToDelete = findClientsByIdentity(client);
 
-        // Buscar si tiene espacio asociado
-        String spaceKey = client.getSpaceKey();
-        if (spaceKey != null) {
-            Space space = spaceRepository.findById(spaceKey).orElse(null);
-            if (space != null) {
-                space.setOccupied(false);
-                space.setHold(false);
-                space.setClientId(null);
-                space.setStartTime(null);
-                space.setClient(null);
-                spaceRepository.save(space);
-                System.out.println("Espacio " + spaceKey + " liberado al eliminar cliente " + id);
-            }
+        if (clientsToDelete.isEmpty()) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Cliente no encontrado");
         }
 
-        // Eliminar cliente
-        clientRepository.delete(client);
+        releaseSpacesForClients(clientsToDelete);
+        clientRepository.deleteAll(clientsToDelete);
     }
 
 
@@ -282,140 +277,7 @@ public class ClientService {
 
 
 
-   /* @Transactional
-    public void resetAllData() {
-        System.out.println("=== INICIO DEL CIERRE DEL DÍA ===");
-        System.out.println("Fecha/Hora: " + new Date());
-
-        // 1. Cargar todos los espacios y clientes
-        System.out.println("Cargando espacios y clientes...");
-        List<Space> allSpaces = spaceRepository.findAll();
-        List<Client> allClients = clientRepository.findAll();
-
-        List<Client> clientsToUpdate = new ArrayList<>();
-
-        // 2. Liberar espacios (siempre)
-        System.out.println("Liberando espacios...");
-        for (Space space : allSpaces) {
-            if (space.isOccupied()) {
-                System.out.println(" → Liberando espacio ocupado: " + space.getKey());
-                space.setOccupied(false);
-                space.setHold(false);
-                space.setClientId(null);
-                space.setStartTime(null);
-
-            } else {
-                System.out.println(" → Espacio ya libre: " + space.getKey());
-            }
-        }
-        spaceRepository.saveAll(allSpaces);
-
-        // 3. Limpiar clientes que aún tienen spaceKey no null (inconsistencias)
-        System.out.println("Buscando clientes con spaceKey no reseteado...");
-        for (Client client : allClients) {
-            if (client.getSpaceKey() != null) {
-                System.out.println(" → Cliente con spaceKey pendiente: ID " + client.getId() +
-                        " | spaceKey: " + client.getSpaceKey() +
-                        " | entryTimestamp: " + client.getEntryTimestamp() +
-                        " | exitTimestamp: " + client.getExitTimestamp());
-
-                client.setSpaceKey(null);
-                client.setEntryTimestamp(null);
-
-                // Solo poner exitTimestamp si NO tenía salida previa
-                if (client.getExitTimestamp() == null) {
-                    long now = System.currentTimeMillis();
-                    client.setExitTimestamp(now);
-                    System.out.println("   → Salida forzada aplicada: " + new Date(now));
-                } else {
-                    System.out.println("   → Salida previa detectada (" + new Date(client.getExitTimestamp()) + "). No se actualiza.");
-                }
-
-                clientsToUpdate.add(client);
-            }
-        }
-
-        // 4. Guardar clientes actualizados
-        if (!clientsToUpdate.isEmpty()) {
-            System.out.println("Guardando " + clientsToUpdate.size() + " clientes con campos reseteados...");
-            clientRepository.saveAll(clientsToUpdate);
-            System.out.println("Clientes guardados.");
-        } else {
-            System.out.println("No hay clientes con spaceKey pendiente.");
-        }
-
-        System.out.println("=== CIERRE DEL DÍA FINALIZADO ===");
-        System.out.println("Espacios procesados: " + allSpaces.size());
-        System.out.println("Clientes reseteados: " + clientsToUpdate.size());
-        System.out.println("=================================");
-    }*/
-
-
-    @Transactional
-    public void resetAllData0() {
-        System.out.println("=== INICIO DEL CIERRE DEL DÍA ===");
-        System.out.println("Fecha/Hora: " + new Date());
-
-        List<Space> allSpaces = spaceRepository.findAll();
-        List<Client> allClients = clientRepository.findAll();
-
-        List<Client> clientsToUpdate = new ArrayList<>();
-        int spacesReset = 0;
-
-        System.out.println("Liberando espacios...");
-        for (Space space : allSpaces) {
-            // Limpia SIEMPRE el estado operativo del espacio
-            if (space.isOccupied() || space.getClientId() != null || space.getStartTime() != null || space.isHold()) {
-                System.out.println(" → Reseteando espacio: " + space.getKey() +
-                        " | occupied=" + space.isOccupied() +
-                        " | clientId=" + space.getClientId());
-                spacesReset++;
-            }
-
-            space.setOccupied(false);
-            space.setHold(false);
-            space.setClientId(null);
-            space.setStartTime(null);
-            space.setClient(null); // ✅ FIX clave
-        }
-        spaceRepository.saveAll(allSpaces);
-
-        System.out.println("Buscando clientes con spaceKey no reseteado...");
-        for (Client client : allClients) {
-            if (client.getSpaceKey() != null) {
-                System.out.println(" → Cliente con spaceKey pendiente: ID " + client.getId() +
-                        " | spaceKey: " + client.getSpaceKey() +
-                        " | entryTimestamp: " + client.getEntryTimestamp() +
-                        " | exitTimestamp: " + client.getExitTimestamp());
-
-                client.setSpaceKey(null);
-                client.setEntryTimestamp(null);
-
-                if (client.getExitTimestamp() == null) {
-                    long now = System.currentTimeMillis();
-                    client.setExitTimestamp(now);
-                    System.out.println("   → Salida forzada aplicada: " + new Date(now));
-                } else {
-                    System.out.println("   → Salida previa detectada (" + new Date(client.getExitTimestamp()) + "). No se actualiza.");
-                }
-
-                clientsToUpdate.add(client);
-            }
-        }
-
-        if (!clientsToUpdate.isEmpty()) {
-            System.out.println("Guardando " + clientsToUpdate.size() + " clientes con campos reseteados...");
-            clientRepository.saveAll(clientsToUpdate);
-        } else {
-            System.out.println("No hay clientes con spaceKey pendiente.");
-        }
-
-        System.out.println("=== CIERRE DEL DÍA FINALIZADO ===");
-        System.out.println("Espacios procesados: " + allSpaces.size());
-        System.out.println("Espacios reseteados: " + spacesReset);
-        System.out.println("Clientes reseteados: " + clientsToUpdate.size());
-        System.out.println("=================================");
-    }
+ 
 
     @Transactional
     public void resetAllData() {
@@ -423,34 +285,25 @@ public class ClientService {
         long nowMs = System.currentTimeMillis();
         System.out.println("Fecha/Hora: " + new Date(nowMs));
 
-        // 1) Cargar estado actual
-        List<Space> allSpaces = spaceRepository.findAll();
-        List<Client> allClients = clientRepository.findAll();
+        // 1) Cargar solo espacios con estado operativo pendiente
+        List<Space> spacesToReset = spaceRepository.findByOccupiedTrueOrHoldTrueOrClientIdIsNotNullOrStartTimeIsNotNull();
 
         // 2) Capturar clientIds vinculados a espacios antes de limpiar (para no depender solo de spaceKey)
         Set<Long> affectedClientIds = new HashSet<>();
-        int spacesReset = 0;
+        int spacesReset = spacesToReset.size();
 
         System.out.println("Liberando espacios...");
-        for (Space space : allSpaces) {
+        for (Space space : spacesToReset) {
             if (space.getClientId() != null) {
                 affectedClientIds.add(space.getClientId());
             }
 
-            boolean needsReset =
-                    space.isOccupied() ||
-                            space.isHold() ||
-                            space.getClientId() != null ||
-                            space.getStartTime() != null ||
-                            space.getClient() != null;
-
-            if (needsReset) {
+            {
                 System.out.println(" → Reseteando espacio: " + space.getKey() +
                         " | occupied=" + space.isOccupied() +
                         " | hold=" + space.isHold() +
                         " | clientId=" + space.getClientId() +
                         " | startTime=" + space.getStartTime());
-                spacesReset++;
             }
 
             // Limpieza completa del espacio
@@ -460,13 +313,19 @@ public class ClientService {
             space.setStartTime(null);
             space.setClient(null); // importante para evitar referencia colgada
         }
-        spaceRepository.saveAll(allSpaces);
+        if (!spacesToReset.isEmpty()) {
+            spaceRepository.saveAll(spacesToReset);
+        }
 
         // 3) Limpiar clientes asociados por spaceKey o por clientId detectado en espacios
         List<Client> clientsToUpdate = new ArrayList<>();
         System.out.println("Buscando clientes para resetear...");
 
-        for (Client client : allClients) {
+        List<Client> candidateClients = affectedClientIds.isEmpty()
+                ? clientRepository.findBySpaceKeyIsNotNull()
+                : clientRepository.findBySpaceKeyIsNotNullOrIdIn(affectedClientIds);
+
+        for (Client client : candidateClients) {
             boolean hasSpaceKey = client.getSpaceKey() != null && !client.getSpaceKey().isBlank();
             boolean wasLinkedBySpace = client.getId() != null && affectedClientIds.contains(client.getId());
 
@@ -500,7 +359,7 @@ public class ClientService {
         }
 
         System.out.println("=== CIERRE DEL DÍA FINALIZADO ===");
-        System.out.println("Espacios procesados: " + allSpaces.size());
+        System.out.println("Espacios procesados: " + spacesToReset.size());
         System.out.println("Espacios reseteados: " + spacesReset);
         System.out.println("Clientes reseteados: " + clientsToUpdate.size());
         System.out.println("=================================");
@@ -536,6 +395,28 @@ public class ClientService {
     @Transactional(readOnly = true)
     public List<Client> getUniqueClients() {
         return clientRepository.findUniqueClientsLatestSnapshot();
+    }
+
+    @Transactional(readOnly = true)
+    public PagedResponse<Client> getUniqueClientsPage(String search, Integer page, Integer size) {
+        int safePage = Math.max(page != null ? page : 0, 0);
+        int safeSize = Math.min(Math.max(size != null ? size : 20, 1), 100);
+        String normalizedSearch = search != null ? search.trim() : "";
+
+        Page<Client> result = clientRepository.findUniqueClientsLatestSnapshotPage(
+                normalizedSearch,
+                PageRequest.of(safePage, safeSize)
+        );
+
+        return new PagedResponse<>(
+                result.getContent(),
+                result.getNumber(),
+                result.getSize(),
+                result.getTotalElements(),
+                result.getTotalPages(),
+                result.isFirst(),
+                result.isLast()
+        );
     }
 
 
@@ -624,6 +505,68 @@ public class ClientService {
         if (!dni.isBlank()) return "dni:" + dni;
         if (!phone.isBlank()) return "phone:" + phone;
         return "name:" + name;
+    }
+
+    private List<Client> findClientsByIdentity(Client client) {
+        String dni = client.getDni() != null ? client.getDni().trim() : "";
+        if (!dni.isBlank()) {
+            return clientRepository.findAllByDni(dni);
+        }
+
+        String phoneDigits = normalizePhoneDigits(client.getPhoneIntl());
+        if (phoneDigits.isBlank()) {
+            phoneDigits = normalizePhoneDigits(client.getPhoneRaw());
+        }
+        if (!phoneDigits.isBlank()) {
+            return clientRepository.findAllByPhoneDigits(phoneDigits);
+        }
+
+        String normalizedName = client.getName() != null ? client.getName().trim() : "";
+        if (!normalizedName.isBlank()) {
+            return clientRepository.findAllByNameIgnoreCase(normalizedName);
+        }
+
+        return List.of(client);
+    }
+
+    private void releaseSpacesForClients(List<Client> clientsToDelete) {
+        Map<String, Space> spacesToRelease = new LinkedHashMap<>();
+
+        Set<Long> clientIds = clientsToDelete.stream()
+                .map(Client::getId)
+                .filter(Objects::nonNull)
+                .collect(LinkedHashSet::new, LinkedHashSet::add, LinkedHashSet::addAll);
+
+        if (!clientIds.isEmpty()) {
+            for (Space space : spaceRepository.findByClientIdIn(clientIds)) {
+                spacesToRelease.put(space.getKey(), space);
+            }
+        }
+
+        for (Client client : clientsToDelete) {
+            String spaceKey = client.getSpaceKey();
+            if (spaceKey != null && !spaceKey.isBlank()) {
+                spaceRepository.findById(spaceKey).ifPresent(space -> spacesToRelease.put(space.getKey(), space));
+            }
+        }
+
+        if (spacesToRelease.isEmpty()) {
+            return;
+        }
+
+        for (Space space : spacesToRelease.values()) {
+            space.setOccupied(false);
+            space.setHold(false);
+            space.setClientId(null);
+            space.setStartTime(null);
+            space.setClient(null);
+        }
+
+        spaceRepository.saveAll(spacesToRelease.values());
+    }
+
+    private String normalizePhoneDigits(String value) {
+        return value != null ? value.replaceAll("\\D", "") : "";
     }
 
 }

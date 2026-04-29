@@ -1,0 +1,3 @@
+-- Baseline inicial de Flyway para un esquema ya existente.
+-- No modifica tablas ni datos.
+-- Las migraciones reales empezaran en V2__...

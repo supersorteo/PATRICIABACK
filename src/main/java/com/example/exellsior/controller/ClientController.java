@@ -1,5 +1,6 @@
 package com.example.exellsior.controller;
 
+import com.example.exellsior.dto.PagedResponse;
 import com.example.exellsior.entity.Client;
 import com.example.exellsior.services.ClientService;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -27,6 +28,15 @@ public class ClientController {
     @GetMapping("/unique")
     public ResponseEntity<List<Client>> getUniqueClients() {
         return ResponseEntity.ok(clientService.getUniqueClients());
+    }
+
+    @GetMapping("/unique/page")
+    public ResponseEntity<PagedResponse<Client>> getUniqueClientsPage(
+            @RequestParam(defaultValue = "0") Integer page,
+            @RequestParam(defaultValue = "20") Integer size,
+            @RequestParam(required = false) String search
+    ) {
+        return ResponseEntity.ok(clientService.getUniqueClientsPage(search, page, size));
     }
 
     @GetMapping("/dni/{dni}/monthly-count")
