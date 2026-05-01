@@ -1,6 +1,6 @@
 package com.example.exellsior.entity;
 
-import com.fasterxml.jackson.annotation.JsonManagedReference;
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.*;
 
 import java.util.ArrayList;
@@ -19,6 +19,7 @@ public class Subsuelo {
     // QUITAMOS la relación con spaces del JSON (no la necesitamos al crear subsuelo)
     // La relación queda solo para consultas internas
     @OneToMany(mappedBy = "subsuelo", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
+    @JsonIgnore
     private List<Space> spaces = new ArrayList<>();
 
     public String getId() {

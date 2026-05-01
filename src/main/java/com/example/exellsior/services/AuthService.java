@@ -23,57 +23,7 @@ public class AuthService {
 
     private final Map<String, String> activeSessions = new HashMap<>();
 
-   /* @Transactional
-    public void register(String username, String password) {
-        if (adminUserRepository.count() > 0) {
-            throw new RuntimeException("Ya existe un usuario administrador");
-        }
-
-        AdminUser user = new AdminUser();
-        user.setUsername(username);
-        user.setPassword(password);  // ← Guardamos en texto plano
-        adminUserRepository.save(user);
-    }*/
-
-    // Login
-    /*public AdminUser login(String username, String password) {
-        Optional<AdminUser> userOpt = adminUserRepository.findByUsername(username);
-        if (userOpt.isEmpty()) {
-            throw new RuntimeException("Usuario o contraseña incorrectos");
-        }
-
-        AdminUser user = userOpt.get();
-        if (!user.getPassword().equals(password)) {  // ← Comparación directa
-            throw new RuntimeException("Usuario o contraseña incorrectos");
-        }
-
-        return user;
-    }*/
-
-
-
-    // Cambiar contraseña
-   /* @Transactional
-    public void changePassword(String username, String oldPassword, String newPassword) {
-        AdminUser user = login(username, oldPassword);
-        user.setPassword(newPassword);  // ← Guardamos nueva en texto plano
-        adminUserRepository.save(user);
-    }*/
-
-
-   /* @Transactional
-    public void register(String username, String password) {
-        if (adminUserRepository.count() > 0) {
-            throw new RuntimeException("Ya existe un usuario administrador");
-        }
-
-        AdminUser user = new AdminUser();
-        user.setUsername(username);
-        user.setPasswordHash(passwordEncoder.encode(password)); // Cifrar con BCrypt
-        adminUserRepository.save(user);
-    }*/
-
-
+ 
 
     @Transactional
     public void register(String username, String password) {
@@ -95,20 +45,7 @@ public class AuthService {
         adminUserRepository.save(user);
     }
 
-   /* public String login(String username, String password) {
-        Optional<AdminUser> userOpt = adminUserRepository.findByUsername(username);
-        if (userOpt.isEmpty() || !passwordEncoder.matches(password, userOpt.get().getPasswordHash())) {
-            throw new RuntimeException("Usuario o contraseña incorrectos");
-        }
-
-        // Generar token simple
-        String token = UUID.randomUUID().toString();
-        activeSessions.put(token, username);
-
-        return token;
-
-    }*/
-
+  
     public Map<String, String> login(String username, String password) {
         Optional<AdminUser> userOpt = adminUserRepository.findByUsername(username);
         if (userOpt.isEmpty() || !passwordEncoder.matches(password, userOpt.get().getPasswordHash())) {

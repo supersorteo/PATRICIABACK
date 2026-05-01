@@ -38,9 +38,7 @@ public class SubsueloService {
         return subsueloRepository.save(existing);
     }
 
-    /*public void deleteSubsuelo(String id) {
-        subsueloRepository.deleteById(id);
-    }*/
+   
 
     @Transactional
     public void deleteSubsuelo(String id) {

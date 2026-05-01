@@ -1,7 +1,9 @@
 package com.example.exellsior.controller;
 
 import com.example.exellsior.dto.PagedResponse;
+import com.example.exellsior.dto.ReportScheduleConfigDTO;
 import com.example.exellsior.entity.Report;
+import com.example.exellsior.services.ReportScheduleService;
 import com.example.exellsior.services.ReportService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
@@ -18,6 +20,8 @@ import java.util.Optional;
 public class ReportController {
     @Autowired
     private ReportService reportService;
+    @Autowired
+    private ReportScheduleService reportScheduleService;
 
 
 
@@ -35,6 +39,16 @@ public class ReportController {
     public ResponseEntity<Report> createOrGenerate(@RequestBody Report report) {
         Report savedReport = reportService.createOrGenerate(report);
         return ResponseEntity.ok(savedReport);
+    }
+
+    @GetMapping("/schedule")
+    public ResponseEntity<ReportScheduleConfigDTO> getScheduleConfig() {
+        return ResponseEntity.ok(reportScheduleService.getConfig());
+    }
+
+    @PutMapping("/schedule")
+    public ResponseEntity<ReportScheduleConfigDTO> updateScheduleConfig(@RequestBody ReportScheduleConfigDTO config) {
+        return ResponseEntity.ok(reportScheduleService.updateConfig(config));
     }
 
 

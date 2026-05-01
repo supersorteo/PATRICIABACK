@@ -6,11 +6,13 @@ import com.example.exellsior.entity.ClientVehicle;
 import com.example.exellsior.entity.Space;
 import com.example.exellsior.entity.VehicleType;
 import com.example.exellsior.repository.ClientRepository;
+import com.example.exellsior.repository.ClientVehicleRepository;
 import com.example.exellsior.repository.SpaceRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.server.ResponseStatusException;
@@ -19,7 +21,9 @@ import java.time.LocalDate;
 import java.time.YearMonth;
 import java.time.ZoneId;
 import java.util.*;
+import java.util.Date;
 
+@Slf4j
 @Service
 public class ClientService {
     @Autowired
@@ -28,14 +32,19 @@ public class ClientService {
     @Autowired
     private SpaceRepository spaceRepository;
 
+    @Autowired
+    private ClientVehicleRepository clientVehicleRepository;
+
 
     @Autowired
     private VehicleTypeService vehicleTypeService;
 
+    @Transactional(readOnly = true)
     public List<Client> getAllClients() {
         return clientRepository.findAll();
     }
 
+    @Transactional(readOnly = true)
     public Client getById(Long id) {
         return clientRepository.findById(id)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Cliente no encontrado"));
@@ -105,7 +114,9 @@ public class ClientService {
     public Client saveClient(Client client) {
         List<ClientVehicle> resolved = resolveClientVehicles(client, client.getClientVehicles());
         replaceClientVehicles(client, resolved);
-        return clientRepository.save(client);
+        Client saved = clientRepository.save(client);
+        initializeClientAssociations(saved);
+        return saved;
     }
 
 
@@ -153,7 +164,9 @@ public class ClientService {
             }
         }
 
-        return clientRepository.save(client);
+        Client saved = clientRepository.save(client);
+        initializeClientAssociations(saved);
+        return saved;
     }
 
 
@@ -166,22 +179,48 @@ public class ClientService {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Cliente no encontrado");
         }
 
+        Set<Long> clientIdsToDelete = clientsToDelete.stream()
+                .map(Client::getId)
+                .filter(Objects::nonNull)
+                .collect(LinkedHashSet::new, LinkedHashSet::add, LinkedHashSet::addAll);
+
         releaseSpacesForClients(clientsToDelete);
+
+        if (!clientIdsToDelete.isEmpty()) {
+            clientVehicleRepository.deleteByClientIdIn(clientIdsToDelete);
+        }
+
+        clientsToDelete.forEach(c -> {
+            if (c.getClientVehicles() != null) {
+                c.getClientVehicles().clear();
+            }
+        });
+
         clientRepository.deleteAll(clientsToDelete);
     }
 
 
 
 
-    // ClientService.java
+    @Transactional(readOnly = true)
+    public List<Client> getByDateRange(LocalDate from, LocalDate to) {
+        ZoneId zone = ZoneId.of("America/Argentina/Buenos_Aires");
+        Date dateFrom = Date.from(from.atStartOfDay(zone).toInstant());
+        Date dateTo = Date.from(to.plusDays(1).atStartOfDay(zone).toInstant());
+        return clientRepository.findByEntryTimestampBetween(dateFrom, dateTo);
+    }
+
+    @Transactional(readOnly = true)
     public Client getByDni(String dni) {
         return clientRepository.findFirstByDniOrderByIdDesc(dni).orElse(null);
     }
 
-
+    @Transactional(readOnly = true)
     public List<Client> getReservationsByDni(String dni) {
         if (dni == null || dni.trim().isEmpty()) return List.of();
-        return clientRepository.findByDniOrderByIdDesc(dni.trim());
+        List<Client> clients = clientRepository.findByDniOrderByIdDesc(dni.trim());
+        clients.forEach(this::initializeClientAssociations);
+        return clients;
     }
 
 
@@ -243,6 +282,7 @@ public class ClientService {
         targetSpace.setStartTime(System.currentTimeMillis());
         spaceRepository.save(targetSpace);
 
+        initializeClientAssociations(client);
         return client;
     }
 
@@ -272,7 +312,7 @@ public class ClientService {
             clientRepository.save(client);
         }
 
-        System.out.println("Espacio liberado. Cliente " + clientId + " marcado con exitTimestamp");
+        log.info("Espacio liberado. Cliente {} marcado con exitTimestamp", clientId);
     }
 
 
@@ -281,9 +321,9 @@ public class ClientService {
 
     @Transactional
     public void resetAllData() {
-        System.out.println("=== INICIO DEL CIERRE DEL DÍA ===");
+        log.info("=== INICIO DEL CIERRE DEL DÍA ===");
         long nowMs = System.currentTimeMillis();
-        System.out.println("Fecha/Hora: " + new Date(nowMs));
+        log.info("Fecha/Hora: {}", new Date(nowMs));
 
         // 1) Cargar solo espacios con estado operativo pendiente
         List<Space> spacesToReset = spaceRepository.findByOccupiedTrueOrHoldTrueOrClientIdIsNotNullOrStartTimeIsNotNull();
@@ -292,19 +332,14 @@ public class ClientService {
         Set<Long> affectedClientIds = new HashSet<>();
         int spacesReset = spacesToReset.size();
 
-        System.out.println("Liberando espacios...");
+        log.info("Liberando espacios...");
         for (Space space : spacesToReset) {
             if (space.getClientId() != null) {
                 affectedClientIds.add(space.getClientId());
             }
 
-            {
-                System.out.println(" → Reseteando espacio: " + space.getKey() +
-                        " | occupied=" + space.isOccupied() +
-                        " | hold=" + space.isHold() +
-                        " | clientId=" + space.getClientId() +
-                        " | startTime=" + space.getStartTime());
-            }
+            log.debug("Reseteando espacio: {} | occupied={} | hold={} | clientId={} | startTime={}",
+                    space.getKey(), space.isOccupied(), space.isHold(), space.getClientId(), space.getStartTime());
 
             // Limpieza completa del espacio
             space.setOccupied(false);
@@ -319,7 +354,7 @@ public class ClientService {
 
         // 3) Limpiar clientes asociados por spaceKey o por clientId detectado en espacios
         List<Client> clientsToUpdate = new ArrayList<>();
-        System.out.println("Buscando clientes para resetear...");
+        log.info("Buscando clientes para resetear...");
 
         List<Client> candidateClients = affectedClientIds.isEmpty()
                 ? clientRepository.findBySpaceKeyIsNotNull()
@@ -330,18 +365,15 @@ public class ClientService {
             boolean wasLinkedBySpace = client.getId() != null && affectedClientIds.contains(client.getId());
 
             if (hasSpaceKey || wasLinkedBySpace) {
-                System.out.println(" → Reseteando cliente ID " + client.getId() +
-                        " | spaceKey=" + client.getSpaceKey() +
-                        " | entryTimestamp=" + client.getEntryTimestamp() +
-                        " | exitTimestamp=" + client.getExitTimestamp());
+                log.debug("Reseteando cliente ID {} | spaceKey={} | entryTimestamp={} | exitTimestamp={}",
+                        client.getId(), client.getSpaceKey(), client.getEntryTimestamp(), client.getExitTimestamp());
 
                 client.setSpaceKey(null);
                 client.setEntryTimestamp(null);
 
-                // Si no tenía salida, se fuerza al momento del cierre
                 if (client.getExitTimestamp() == null) {
                     client.setExitTimestamp(nowMs);
-                    System.out.println("   → exitTimestamp forzado: " + new Date(nowMs));
+                    log.debug("exitTimestamp forzado: {}", new Date(nowMs));
                 }
 
                 // Marca de último cierre diario aplicado
@@ -352,44 +384,16 @@ public class ClientService {
         }
 
         if (!clientsToUpdate.isEmpty()) {
-            System.out.println("Guardando " + clientsToUpdate.size() + " clientes reseteados...");
+            log.info("Guardando {} clientes reseteados...", clientsToUpdate.size());
             clientRepository.saveAll(clientsToUpdate);
         } else {
-            System.out.println("No hubo clientes para resetear.");
+            log.info("No hubo clientes para resetear.");
         }
 
-        System.out.println("=== CIERRE DEL DÍA FINALIZADO ===");
-        System.out.println("Espacios procesados: " + spacesToReset.size());
-        System.out.println("Espacios reseteados: " + spacesReset);
-        System.out.println("Clientes reseteados: " + clientsToUpdate.size());
-        System.out.println("=================================");
+        log.info("=== CIERRE DEL DÍA FINALIZADO — espacios={} reseteados={} clientes={}",
+                spacesToReset.size(), spacesReset, clientsToUpdate.size());
     }
 
-
-
-    public List<Client> getUniqueClients0() {
-        List<Client> all = clientRepository.findAll();
-
-        // Ordenar descendente por "recencia"
-        all.sort((a, b) -> {
-            long aTs = getClientSortTs(a);
-            long bTs = getClientSortTs(b);
-            return Long.compare(bTs, aTs);
-        });
-
-
-
-        Map<String, Client> unique = new LinkedHashMap<>();
-
-        for (Client c : all) {
-            String key = buildClientIdentityKey(c);
-            if (!unique.containsKey(key)) {
-                unique.put(key, c); // como ya está ordenado desc, el primero es el más reciente
-            }
-        }
-
-        return new ArrayList<>(unique.values());
-    }
 
 
     @Transactional(readOnly = true)
@@ -420,6 +424,7 @@ public class ClientService {
     }
 
 
+    @Transactional(readOnly = true)
     public long getMonthlyServiceCountByDni(String dni, YearMonth ym) {
         if (dni == null || dni.trim().isEmpty()) return 0L;
 
@@ -443,6 +448,7 @@ public class ClientService {
         );
     }
 
+    @Transactional(readOnly = true)
     public Map<String, Long> getMonthlyServiceCountsByDnis(List<String> dnis, YearMonth ym) {
         Map<String, Long> result = new LinkedHashMap<>();
         if (dnis == null || dnis.isEmpty()) return result;
@@ -567,6 +573,33 @@ public class ClientService {
 
     private String normalizePhoneDigits(String value) {
         return value != null ? value.replaceAll("\\D", "") : "";
+    }
+
+    private void initializeClientAssociations(Client client) {
+        if (client == null) {
+            return;
+        }
+
+        List<ClientVehicle> vehicles = client.getClientVehicles();
+        if (vehicles == null) {
+            client.setClientVehicles(new ArrayList<>());
+            return;
+        }
+
+        vehicles.size();
+        for (ClientVehicle vehicle : vehicles) {
+            if (vehicle == null) {
+                continue;
+            }
+
+            VehicleType vehicleType = vehicle.getVehicleType();
+            if (vehicleType != null) {
+                vehicleType.getId();
+                vehicleType.getModel();
+                vehicleType.getCategory();
+                vehicleType.getPrice();
+            }
+        }
     }
 
 }

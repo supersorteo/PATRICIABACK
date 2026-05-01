@@ -3,10 +3,12 @@ package com.example.exellsior.configuration;
 import com.example.exellsior.entity.VehicleType;
 import com.example.exellsior.services.VehicleTypeService;
 import jakarta.annotation.PostConstruct;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
 import java.util.List;
 
+@Slf4j
 @Component
 public class VehicleTypeInitializer {
     private final VehicleTypeService vehicleTypeService;
@@ -144,10 +146,10 @@ public class VehicleTypeInitializer {
                 try {
                     vehicleTypeService.create(v);
                 } catch (Exception e) {
-                    System.out.println("Error al insertar vehículo: " + v.getModel() + " - " + e.getMessage());
+                    log.error("Error al insertar vehículo: {} - {}", v.getModel(), e.getMessage());
                 }
             });
-            System.out.println("Todos los vehículos por defecto cargados correctamente");
+            log.info("Todos los vehículos por defecto cargados correctamente");
         }
     }
 
