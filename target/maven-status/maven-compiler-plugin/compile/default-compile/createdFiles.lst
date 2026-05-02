@@ -1,9 +1,11 @@
 com\example\exellsior\services\MonthlyReportService.class
+com\example\exellsior\entity\ServiceHistory.class
 com\example\exellsior\controller\SubsueloController.class
 com\example\exellsior\services\SubsueloService.class
 com\example\exellsior\dto\SpaceDTO.class
 com\example\exellsior\services\MonthlyReportService$2.class
 com\example\exellsior\repository\VehicleTypeRepository.class
+com\example\exellsior\repository\ServiceHistoryRepository.class
 com\example\exellsior\services\SpaceService.class
 com\example\exellsior\repository\ReportRepository.class
 com\example\exellsior\repository\ClientVehicleRepository.class
@@ -37,8 +39,11 @@ com\example\exellsior\entity\VehicleType.class
 com\example\exellsior\repository\AdminUserRepository.class
 com\example\exellsior\controller\ReportController.class
 com\example\exellsior\services\MonthlyReportService$1.class
+com\example\exellsior\controller\ServiceHistoryController.class
 com\example\exellsior\entity\ReportScheduleSettings.class
 com\example\exellsior\configuration\BCrypt.class
+com\example\exellsior\dto\ServiceHistoryDTO.class
+com\example\exellsior\services\ServiceHistoryService$1.class
 com\example\exellsior\services\VehicleTypeService.class
 com\example\exellsior\controller\AuthController.class
 com\example\exellsior\services\MonthlyReportService$3.class
@@ -47,3 +52,4 @@ com\example\exellsior\dto\ReportScheduleConfigDTO.class
 com\example\exellsior\services\DailyReportService$1.class
 com\example\exellsior\repository\ClientRepository.class
 com\example\exellsior\configuration\VehicleTypeInitializer.class
+com\example\exellsior\services\ServiceHistoryService.class

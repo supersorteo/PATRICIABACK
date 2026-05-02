@@ -39,6 +39,9 @@ public class ClientService {
     @Autowired
     private VehicleTypeService vehicleTypeService;
 
+    @Autowired
+    private ServiceHistoryService serviceHistoryService;
+
     @Transactional(readOnly = true)
     public List<Client> getAllClients() {
         return clientRepository.findAll();
@@ -171,6 +174,52 @@ public class ClientService {
 
 
     @Transactional
+    public void updateVehiclesForAllByDni(String dni, List<Map<String, Object>> vehiclesPayload) {
+        if (dni == null || dni.isBlank()) return;
+        List<Client> clients = clientRepository.findAllByDni(dni.trim());
+        if (clients == null || clients.isEmpty()) return;
+
+        List<ClientVehicle> incoming = new ArrayList<>();
+        if (vehiclesPayload != null) {
+            Client ref = clients.get(0);
+            for (Object item : vehiclesPayload) {
+                if (!(item instanceof Map)) continue;
+                Map<?, ?> m = (Map<?, ?>) item;
+                Object vtObj = m.get("vehicleType");
+                if (!(vtObj instanceof Map)) continue;
+                Object idObj = ((Map<?, ?>) vtObj).get("id");
+                if (idObj == null) continue;
+                ClientVehicle cv = new ClientVehicle();
+                VehicleType vt = vehicleTypeService.getById(Long.valueOf(idObj.toString()));
+                cv.setVehicleType(vt);
+                cv.setPlate(m.get("plate") != null ? m.get("plate").toString() : null);
+                cv.setNotes(m.get("notes") != null ? m.get("notes").toString() : null);
+                cv.setClient(ref);
+                incoming.add(cv);
+            }
+        }
+
+        if (incoming.size() > 4) {
+            throw new RuntimeException("Solo se permiten hasta 4 vehículos por cliente");
+        }
+
+        for (Client client : clients) {
+            List<ClientVehicle> resolved = new ArrayList<>();
+            for (ClientVehicle src : incoming) {
+                ClientVehicle cv = new ClientVehicle();
+                cv.setClient(client);
+                cv.setVehicleType(src.getVehicleType());
+                cv.setPlate(src.getPlate());
+                cv.setNotes(src.getNotes());
+                resolved.add(cv);
+            }
+            replaceClientVehicles(client, resolved);
+            clientRepository.save(client);
+        }
+    }
+
+
+    @Transactional
     public void deleteClient(Long id) {
         Client client = getById(id);
         List<Client> clientsToDelete = findClientsByIdentity(client);
@@ -213,6 +262,62 @@ public class ClientService {
     @Transactional(readOnly = true)
     public Client getByDni(String dni) {
         return clientRepository.findFirstByDniOrderByIdDesc(dni).orElse(null);
+    }
+
+    @Transactional
+    public void resetAllDataForDay(LocalDate operationalDay) {
+        ZoneId zone = ZoneId.of("America/Argentina/Buenos_Aires");
+        long nowMs = System.currentTimeMillis();
+        long closeDayMarkerMs = operationalDay.atStartOfDay(zone).toInstant().toEpochMilli();
+
+        List<Space> spacesToReset = spaceRepository.findByOccupiedTrueOrHoldTrueOrClientIdIsNotNullOrStartTimeIsNotNull();
+        Set<Long> affectedClientIds = new HashSet<>();
+
+        for (Space space : spacesToReset) {
+            if (space.getClientId() != null) {
+                affectedClientIds.add(space.getClientId());
+            }
+
+            space.setOccupied(false);
+            space.setHold(false);
+            space.setClientId(null);
+            space.setStartTime(null);
+            space.setClient(null);
+        }
+
+        if (!spacesToReset.isEmpty()) {
+            spaceRepository.saveAll(spacesToReset);
+        }
+
+        List<Client> clientsToUpdate = new ArrayList<>();
+        List<Client> candidateClients = affectedClientIds.isEmpty()
+                ? clientRepository.findBySpaceKeyIsNotNull()
+                : clientRepository.findBySpaceKeyIsNotNullOrIdIn(affectedClientIds);
+
+        for (Client client : candidateClients) {
+            boolean hasSpaceKey = client.getSpaceKey() != null && !client.getSpaceKey().isBlank();
+            boolean wasLinkedBySpace = client.getId() != null && affectedClientIds.contains(client.getId());
+
+            if (!hasSpaceKey && !wasLinkedBySpace) {
+                continue;
+            }
+
+            if (client.getExitTimestamp() == null) {
+                client.setExitTimestamp(nowMs);
+            }
+
+            serviceHistoryService.upsertFromClient(client, client.getExitTimestamp(), operationalDay, "DAY_CLOSE");
+
+            client.setSpaceKey(null);
+            client.setEntryTimestamp(null);
+            client.setLastDayClosed(closeDayMarkerMs);
+
+            clientsToUpdate.add(client);
+        }
+
+        if (!clientsToUpdate.isEmpty()) {
+            clientRepository.saveAll(clientsToUpdate);
+        }
     }
 
     @Transactional(readOnly = true)
@@ -308,6 +413,8 @@ public class ClientService {
             // client.setSpaceKey(null);
             client.setExitTimestamp(System.currentTimeMillis());  // ← REGISTRAR FECHA DE SALIDA
 
+            serviceHistoryService.upsertFromClient(client, client.getExitTimestamp(), null, "MANUAL_RELEASE");
+
             // NO limpiar otros datos (price, vehicle, etc.)
             clientRepository.save(client);
         }
@@ -368,13 +475,15 @@ public class ClientService {
                 log.debug("Reseteando cliente ID {} | spaceKey={} | entryTimestamp={} | exitTimestamp={}",
                         client.getId(), client.getSpaceKey(), client.getEntryTimestamp(), client.getExitTimestamp());
 
-                client.setSpaceKey(null);
-                client.setEntryTimestamp(null);
-
                 if (client.getExitTimestamp() == null) {
                     client.setExitTimestamp(nowMs);
                     log.debug("exitTimestamp forzado: {}", new Date(nowMs));
                 }
+
+                serviceHistoryService.upsertFromClient(client, client.getExitTimestamp(), null, "DAY_CLOSE");
+
+                client.setSpaceKey(null);
+                client.setEntryTimestamp(null);
 
                 // Marca de último cierre diario aplicado
                 client.setLastDayClosed(nowMs);

@@ -91,6 +91,15 @@ public class ClientController {
         return ResponseEntity.ok(ClientDTO.fromSummary(client));
     }
 
+    @PutMapping("/dni/{dni}/vehicles")
+    public ResponseEntity<Void> updateVehiclesByDni(
+            @PathVariable String dni,
+            @RequestBody List<Map<String, Object>> vehiclesPayload
+    ) {
+        clientService.updateVehiclesForAllByDni(dni, vehiclesPayload);
+        return ResponseEntity.noContent().build();
+    }
+
     @GetMapping("/dni/{dni}/reservas")
     public ResponseEntity<List<ClientDTO>> getReservationsByDni(@PathVariable String dni) {
         return ResponseEntity.ok(

@@ -5,6 +5,7 @@ D:\DANILO\EXELLSSIORACTUALIZADO\exellsior\exellsior\src\main\java\com\example\ex
 D:\DANILO\EXELLSSIORACTUALIZADO\exellsior\exellsior\src\main\java\com\example\exellsior\controller\AuthController.java
 D:\DANILO\EXELLSSIORACTUALIZADO\exellsior\exellsior\src\main\java\com\example\exellsior\controller\ClientController.java
 D:\DANILO\EXELLSSIORACTUALIZADO\exellsior\exellsior\src\main\java\com\example\exellsior\controller\ReportController.java
+D:\DANILO\EXELLSSIORACTUALIZADO\exellsior\exellsior\src\main\java\com\example\exellsior\controller\ServiceHistoryController.java
 D:\DANILO\EXELLSSIORACTUALIZADO\exellsior\exellsior\src\main\java\com\example\exellsior\controller\SpaceController.java
 D:\DANILO\EXELLSSIORACTUALIZADO\exellsior\exellsior\src\main\java\com\example\exellsior\controller\SubsueloController.java
 D:\DANILO\EXELLSSIORACTUALIZADO\exellsior\exellsior\src\main\java\com\example\exellsior\controller\VehicleTypeController.java
@@ -12,12 +13,14 @@ D:\DANILO\EXELLSSIORACTUALIZADO\exellsior\exellsior\src\main\java\com\example\ex
 D:\DANILO\EXELLSSIORACTUALIZADO\exellsior\exellsior\src\main\java\com\example\exellsior\dto\ClientDTO.java
 D:\DANILO\EXELLSSIORACTUALIZADO\exellsior\exellsior\src\main\java\com\example\exellsior\dto\PagedResponse.java
 D:\DANILO\EXELLSSIORACTUALIZADO\exellsior\exellsior\src\main\java\com\example\exellsior\dto\ReportScheduleConfigDTO.java
+D:\DANILO\EXELLSSIORACTUALIZADO\exellsior\exellsior\src\main\java\com\example\exellsior\dto\ServiceHistoryDTO.java
 D:\DANILO\EXELLSSIORACTUALIZADO\exellsior\exellsior\src\main\java\com\example\exellsior\dto\SpaceDTO.java
 D:\DANILO\EXELLSSIORACTUALIZADO\exellsior\exellsior\src\main\java\com\example\exellsior\entity\AdminUser.java
 D:\DANILO\EXELLSSIORACTUALIZADO\exellsior\exellsior\src\main\java\com\example\exellsior\entity\Client.java
 D:\DANILO\EXELLSSIORACTUALIZADO\exellsior\exellsior\src\main\java\com\example\exellsior\entity\ClientVehicle.java
 D:\DANILO\EXELLSSIORACTUALIZADO\exellsior\exellsior\src\main\java\com\example\exellsior\entity\Report.java
 D:\DANILO\EXELLSSIORACTUALIZADO\exellsior\exellsior\src\main\java\com\example\exellsior\entity\ReportScheduleSettings.java
+D:\DANILO\EXELLSSIORACTUALIZADO\exellsior\exellsior\src\main\java\com\example\exellsior\entity\ServiceHistory.java
 D:\DANILO\EXELLSSIORACTUALIZADO\exellsior\exellsior\src\main\java\com\example\exellsior\entity\Space.java
 D:\DANILO\EXELLSSIORACTUALIZADO\exellsior\exellsior\src\main\java\com\example\exellsior\entity\Subsuelo.java
 D:\DANILO\EXELLSSIORACTUALIZADO\exellsior\exellsior\src\main\java\com\example\exellsior\entity\VehicleType.java
@@ -28,6 +31,7 @@ D:\DANILO\EXELLSSIORACTUALIZADO\exellsior\exellsior\src\main\java\com\example\ex
 D:\DANILO\EXELLSSIORACTUALIZADO\exellsior\exellsior\src\main\java\com\example\exellsior\repository\ClientVehicleRepository.java
 D:\DANILO\EXELLSSIORACTUALIZADO\exellsior\exellsior\src\main\java\com\example\exellsior\repository\ReportRepository.java
 D:\DANILO\EXELLSSIORACTUALIZADO\exellsior\exellsior\src\main\java\com\example\exellsior\repository\ReportScheduleSettingsRepository.java
+D:\DANILO\EXELLSSIORACTUALIZADO\exellsior\exellsior\src\main\java\com\example\exellsior\repository\ServiceHistoryRepository.java
 D:\DANILO\EXELLSSIORACTUALIZADO\exellsior\exellsior\src\main\java\com\example\exellsior\repository\SpaceRepository.java
 D:\DANILO\EXELLSSIORACTUALIZADO\exellsior\exellsior\src\main\java\com\example\exellsior\repository\SubsueloRepository.java
 D:\DANILO\EXELLSSIORACTUALIZADO\exellsior\exellsior\src\main\java\com\example\exellsior\repository\VehicleTypeRepository.java
@@ -37,6 +41,7 @@ D:\DANILO\EXELLSSIORACTUALIZADO\exellsior\exellsior\src\main\java\com\example\ex
 D:\DANILO\EXELLSSIORACTUALIZADO\exellsior\exellsior\src\main\java\com\example\exellsior\services\MonthlyReportService.java
 D:\DANILO\EXELLSSIORACTUALIZADO\exellsior\exellsior\src\main\java\com\example\exellsior\services\ReportScheduleService.java
 D:\DANILO\EXELLSSIORACTUALIZADO\exellsior\exellsior\src\main\java\com\example\exellsior\services\ReportService.java
+D:\DANILO\EXELLSSIORACTUALIZADO\exellsior\exellsior\src\main\java\com\example\exellsior\services\ServiceHistoryService.java
 D:\DANILO\EXELLSSIORACTUALIZADO\exellsior\exellsior\src\main\java\com\example\exellsior\services\SpaceService.java
 D:\DANILO\EXELLSSIORACTUALIZADO\exellsior\exellsior\src\main\java\com\example\exellsior\services\SubsueloService.java
 D:\DANILO\EXELLSSIORACTUALIZADO\exellsior\exellsior\src\main\java\com\example\exellsior\services\VehicleTypeService.java

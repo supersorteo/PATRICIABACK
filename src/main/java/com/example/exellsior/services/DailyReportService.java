@@ -47,7 +47,7 @@ public class DailyReportService {
     public void finalizeDailyReportAndResetDay(LocalDate day) {
         Report r = finalizeDailyReportForDay(day);
         log.info("[DAILY-CLOSE] day={} reportId={}", day, r != null ? r.getId() : "null");
-        clientService.resetAllData();
+        clientService.resetAllDataForDay(day);
     }
 
     @Scheduled(cron = "0 59 23 * * *", zone = "America/Argentina/Buenos_Aires")
@@ -80,7 +80,7 @@ public class DailyReportService {
                 } catch (Exception e) {
                     log.error("[DAILY-CATCHUP] Fallo reporte para {}, continua reset", day, e);
                 }
-                clientService.resetAllData();
+                clientService.resetAllDataForDay(day);
                 log.info("[DAILY-CATCHUP] Reset OK para {}", day);
             } catch (Exception e) {
                 log.error("[DAILY-CATCHUP] Error en reset para {}", day, e);
@@ -187,7 +187,7 @@ public class DailyReportService {
             } catch (Exception e) {
                 log.error("[DAILY-CLOSE] Fallo reporte, continua reset", e);
             }
-            clientService.resetAllData();
+            clientService.resetAllDataForDay(targetDay);
             log.info("[DAILY-CLOSE] Reset OK para {}", targetDay);
         } catch (Exception e) {
             log.error("[DAILY-CLOSE] Error durante reset", e);
@@ -262,21 +262,30 @@ public class DailyReportService {
     }
 
     private String buildClientSnapshotKey(Map<String, Object> client) {
-        String id = normalizeText(client.get("id"));
         Long entryTs = normalizeEpoch(client.get("entryTimestamp"));
         String code = normalizeText(client.get("code"));
+        String dni = normalizeText(client.get("dni"));
+        String phone = normalizeDigits(client.get("phoneIntl"));
+        String name = normalizeText(client.get("name"));
+        String vehicle = normalizeText(client.get("vehicle"));
+        String plate = normalizeText(client.get("plate"));
+        String id = normalizeText(client.get("id"));
 
-        if (id != null) {
-            return "id:" + id + "|entry:" + (entryTs != null ? entryTs : "x");
-        }
         if (code != null || entryTs != null) {
             return "code:" + (code != null ? code : "x") + "|entry:" + (entryTs != null ? entryTs : "x");
         }
 
-        String dni = normalizeText(client.get("dni"));
-        String phone = normalizeDigits(client.get("phoneIntl"));
-        String name = normalizeText(client.get("name"));
-        return "fallback:" + (dni != null ? dni : "x") + "|" + (phone != null ? phone : "x") + "|" + (name != null ? name : "x");
+        if (dni != null || phone != null || name != null) {
+            return "fallback:" +
+                    (dni != null ? dni : "x") + "|" +
+                    (phone != null ? phone : "x") + "|" +
+                    (name != null ? name : "x") + "|" +
+                    (entryTs != null ? entryTs : "x") + "|" +
+                    (vehicle != null ? vehicle : "x") + "|" +
+                    (plate != null ? plate : "x");
+        }
+
+        return "id:" + (id != null ? id : "x") + "|entry:" + (entryTs != null ? entryTs : "x");
     }
 
     private Map<String, Object> mergeClientSnapshots(Map<String, Object> previous, Map<String, Object> incoming) {
