@@ -2,12 +2,15 @@ package com.example.exellsior.repository;
 
 import com.example.exellsior.entity.ServiceHistory;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 import java.time.LocalDate;
 import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 
 @Repository
 public interface ServiceHistoryRepository extends JpaRepository<ServiceHistory, Long> {
@@ -16,4 +19,9 @@ public interface ServiceHistoryRepository extends JpaRepository<ServiceHistory, 
     List<ServiceHistory> findByServiceDateBetweenOrderByServiceDateDescExitTimestampDesc(LocalDate from, LocalDate to);
 
     void deleteByServiceDateIn(Collection<LocalDate> serviceDates);
+
+    boolean existsByServiceDate(LocalDate serviceDate);
+
+    @Query("select distinct sh.serviceDate from ServiceHistory sh where sh.serviceDate in :serviceDates")
+    Set<LocalDate> findExistingServiceDates(@Param("serviceDates") Collection<LocalDate> serviceDates);
 }

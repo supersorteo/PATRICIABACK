@@ -7,6 +7,8 @@ import com.example.exellsior.repository.ReportRepository;
 import com.example.exellsior.repository.ServiceHistoryRepository;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.boot.context.event.ApplicationReadyEvent;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.event.EventListener;
@@ -20,11 +22,13 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 
 @Service
 public class ServiceHistoryService {
 
     private static final ZoneId ZONE = ZoneId.of("America/Argentina/Buenos_Aires");
+    private static final Logger log = LoggerFactory.getLogger(ServiceHistoryService.class);
 
     @Autowired
     private ServiceHistoryRepository serviceHistoryRepository;
@@ -88,6 +92,7 @@ public class ServiceHistoryService {
     public void backfillFromDailyReportsOnStartup() {
         List<Report> dailyReports = reportRepository.findByPeriodTypeAndPeriodKeyStartingWith("DAILY", "");
         Map<LocalDate, Report> selectedReportsByDay = new LinkedHashMap<>();
+        LocalDate today = LocalDate.now(ZONE);
 
         for (Report report : dailyReports) {
             if (report.getPeriodKey() == null || report.getPeriodKey().isBlank()) {
@@ -98,6 +103,10 @@ public class ServiceHistoryService {
             try {
                 serviceDay = LocalDate.parse(report.getPeriodKey());
             } catch (Exception ignored) {
+                continue;
+            }
+
+            if (serviceDay.equals(today)) {
                 continue;
             }
 
@@ -123,17 +132,33 @@ public class ServiceHistoryService {
             }
         }
 
-        if (!selectedReportsByDay.isEmpty()) {
-            serviceHistoryRepository.deleteByServiceDateIn(selectedReportsByDay.keySet());
+        if (selectedReportsByDay.isEmpty()) {
+            log.info("[SERVICE-HISTORY-BACKFILL] No hay reportes diarios para reconstruir.");
+            return;
         }
+
+        Set<LocalDate> existingDays = serviceHistoryRepository.findExistingServiceDates(selectedReportsByDay.keySet());
+        int missingDays = 0;
 
         for (Map.Entry<LocalDate, Report> entry : selectedReportsByDay.entrySet()) {
             LocalDate serviceDay = entry.getKey();
+            if (existingDays.contains(serviceDay)) {
+                continue;
+            }
+
+            missingDays++;
             Report report = entry.getValue();
             for (Map<String, Object> row : parseClients(report.getFilteredClients())) {
                 upsertFromSnapshot(row, serviceDay, "REPORT_BACKFILL");
             }
         }
+
+        if (missingDays == 0) {
+            log.info("[SERVICE-HISTORY-BACKFILL] Historico ya consistente. Dias evaluados: {}", selectedReportsByDay.size());
+            return;
+        }
+
+        log.info("[SERVICE-HISTORY-BACKFILL] Reconstruidos {} dia(s) faltantes de {} evaluados.", missingDays, selectedReportsByDay.size());
     }
 
     @Transactional

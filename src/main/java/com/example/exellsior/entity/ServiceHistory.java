@@ -30,7 +30,8 @@ public class ServiceHistory {
 
     private String plate;
 
-    @Column(columnDefinition = "TEXT")
+    @Lob
+    @Column(name = "notes")
     private String notes;
 
     @Column(name = "space_key")
