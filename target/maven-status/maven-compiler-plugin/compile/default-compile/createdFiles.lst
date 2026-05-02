@@ -23,6 +23,7 @@ com\example\exellsior\repository\ReportScheduleSettingsRepository.class
 com\example\exellsior\services\AuthService.class
 com\example\exellsior\services\ClientService.class
 com\example\exellsior\entity\Client.class
+com\example\exellsior\services\ReportService$1.class
 com\example\exellsior\entity\AdminUser.class
 com\example\exellsior\dto\PagedResponse.class
 com\example\exellsior\repository\SpaceRepository.class

@@ -13,6 +13,7 @@ import java.time.LocalDate;
 import java.time.YearMonth;
 import java.time.ZoneId;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 @RestController
@@ -77,9 +78,13 @@ public class ReportController {
     }
 
     @DeleteMapping("/{id}")
-    public ResponseEntity<Void> deleteReport(@PathVariable Long id) {
-        reportService.deleteReport(id);
-        return ResponseEntity.noContent().build();
+    public ResponseEntity<?> deleteReport(@PathVariable Long id) {
+        try {
+            reportService.deleteReport(id);
+            return ResponseEntity.noContent().build();
+        } catch (IllegalStateException e) {
+            return ResponseEntity.status(409).body(Map.of("error", e.getMessage()));
+        }
     }
 
 

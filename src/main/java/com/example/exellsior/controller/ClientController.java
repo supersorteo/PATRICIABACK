@@ -4,10 +4,12 @@ import com.example.exellsior.dto.ClientDTO;
 import com.example.exellsior.dto.PagedResponse;
 import com.example.exellsior.entity.Client;
 import com.example.exellsior.services.ClientService;
+import com.example.exellsior.services.ReportService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.time.LocalDate;
 import java.time.YearMonth;
 import java.time.ZoneId;
 import java.util.List;
@@ -19,6 +21,9 @@ public class ClientController {
 
     @Autowired
     private ClientService clientService;
+
+    @Autowired
+    private ReportService reportService;
 
     @GetMapping
     public List<ClientDTO> getAll() {
@@ -74,12 +79,22 @@ public class ClientController {
             @RequestParam String from,
             @RequestParam String to
     ) {
-        java.time.LocalDate dateFrom = java.time.LocalDate.parse(from);
-        java.time.LocalDate dateTo = java.time.LocalDate.parse(to);
-        return ResponseEntity.ok(
-                clientService.getByDateRange(dateFrom, dateTo)
-                        .stream().map(ClientDTO::fromSummary).toList()
-        );
+        LocalDate dateFrom = LocalDate.parse(from);
+        LocalDate dateTo = LocalDate.parse(to);
+
+        List<ClientDTO> liveClients = clientService.getByDateRange(dateFrom, dateTo)
+                .stream().map(ClientDTO::fromSummary).toList();
+        if (!liveClients.isEmpty()) {
+            return ResponseEntity.ok(liveClients);
+        }
+
+        // No live data: fall back to daily report snapshots for closed past days
+        LocalDate today = LocalDate.now(ZoneId.of("America/Argentina/Buenos_Aires"));
+        if (dateTo.isBefore(today)) {
+            return ResponseEntity.ok(reportService.getClientsFromDailyReportsByDateRange(dateFrom, dateTo));
+        }
+
+        return ResponseEntity.ok(List.of());
     }
 
     @GetMapping("/dni/{dni}")

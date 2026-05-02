@@ -20,6 +20,7 @@ import org.springframework.stereotype.Service;
 
 import java.time.LocalDate;
 import java.time.OffsetDateTime;
+import java.time.YearMonth;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
@@ -33,6 +34,7 @@ public class DailyReportService {
     @Autowired private SpaceRepository spaceRepository;
     @Autowired private SubsueloRepository subsueloRepository;
     @Autowired private ClientService clientService;
+    @Autowired private MonthlyReportService monthlyReportService;
 
     private final ObjectMapper mapper = new ObjectMapper();
 
@@ -52,7 +54,22 @@ public class DailyReportService {
 
     @Scheduled(cron = "0 59 23 * * *", zone = "America/Argentina/Buenos_Aires")
     public void autoDailyCloseEndOfDay() {
+        ZoneId zone = ZoneId.of("America/Argentina/Buenos_Aires");
+        LocalDate today = LocalDate.now(zone);
+
         runDailyCloseIfNeeded("SCHEDULED");
+
+        boolean isLastDayOfMonth = !today.getMonth().equals(today.plusDays(1).getMonth());
+        if (isLastDayOfMonth) {
+            YearMonth ym = YearMonth.from(today);
+            log.info("[MONTHLY-AUTO] Fin de mes detectado. Generando mensual para {}", ym);
+            try {
+                monthlyReportService.generateFromDailyReports(ym);
+                log.info("[MONTHLY-AUTO] Mensual OK para {}", ym);
+            } catch (Exception e) {
+                log.error("[MONTHLY-AUTO] Error generando mensual para {}", ym, e);
+            }
+        }
     }
 
     @EventListener(ApplicationReadyEvent.class)
@@ -98,14 +115,13 @@ public class DailyReportService {
         List<Client> todayClients = clientRepository.findByEntryTimestampBetween(range[0], range[1]);
         List<Report> sameDayReports = reportRepository.findAllByPeriodTypeAndPeriodKey("DAILY", periodKey);
 
-        if (!dailyFinal) {
-            Optional<Report> existingFinal = sameDayReports.stream()
-                    .filter(r -> Boolean.TRUE.equals(r.getDailyFinal()))
-                    .max(Comparator.comparing(Report::getTimestamp, Comparator.nullsLast(String::compareTo)));
-            if (existingFinal.isPresent()) {
-                log.info("[DAILY-SNAPSHOT] Ya existe reporte final para {}. Se conserva.", periodKey);
-                return existingFinal.get();
-            }
+        Optional<Report> existingFinal = sameDayReports.stream()
+                .filter(r -> Boolean.TRUE.equals(r.getDailyFinal()))
+                .max(Comparator.comparing(Report::getTimestamp, Comparator.nullsLast(String::compareTo)));
+        if (existingFinal.isPresent()) {
+            log.info("[DAILY-IDEMPOTENT] Final ya existe para {}. Operación ignorada (solicitado final={}). Se conserva id={}.",
+                    periodKey, dailyFinal, existingFinal.get().getId());
+            return existingFinal.get();
         }
 
         List<Map<String, Object>> currentClients = snapshotClients(todayClients);
@@ -243,8 +259,15 @@ public class DailyReportService {
     }
 
     private List<Map<String, Object>> mergeAndDedup(List<Map<String, Object>> existing, List<Map<String, Object>> current) {
+        // Only keep exited clients from existing snapshots — active clients (no exitTimestamp) must
+        // come from the DB so that manual deletions are immediately reflected in the report.
+        List<Map<String, Object>> exitedFromExisting = existing == null ? List.of() :
+                existing.stream()
+                        .filter(m -> normalizeEpoch(m.get("exitTimestamp")) != null)
+                        .toList();
+
         List<Map<String, Object>> merged = new ArrayList<>();
-        if (existing != null) merged.addAll(existing);
+        merged.addAll(exitedFromExisting);
         if (current != null) merged.addAll(current);
 
         Map<String, Map<String, Object>> dedup = new LinkedHashMap<>();
@@ -412,16 +435,15 @@ public class DailyReportService {
 
         long now = System.currentTimeMillis();
         for (Map<String, Object> client : clients) {
-            Object entryObj = client.get("entryTimestamp");
-            if (entryObj == null) continue;
-
-            try {
-                long entryTs = Long.parseLong(String.valueOf(entryObj));
-                double hours = (now - entryTs) / 3600000.0;
-                if (hours < 1) stats.merge("under1h", 1, Integer::sum);
-                else if (hours <= 3) stats.merge("between1h3h", 1, Integer::sum);
-                else stats.merge("over3h", 1, Integer::sum);
-            } catch (Exception ignored) {}
+            Long entryTs = normalizeEpoch(client.get("entryTimestamp"));
+            if (entryTs == null) continue;
+            Long exitTs = normalizeEpoch(client.get("exitTimestamp"));
+            // Use actual exit time when available; fall back to now for still-active clients
+            long endTs = (exitTs != null && exitTs > entryTs) ? exitTs : now;
+            double hours = (endTs - entryTs) / 3600000.0;
+            if (hours < 1) stats.merge("under1h", 1, Integer::sum);
+            else if (hours <= 3) stats.merge("between1h3h", 1, Integer::sum);
+            else stats.merge("over3h", 1, Integer::sum);
         }
 
         return stats;

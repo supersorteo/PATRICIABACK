@@ -7,7 +7,6 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDate;
@@ -140,7 +139,6 @@ public class MonthlyReportService {
         return reportRepository.save(monthly);
     }
 
-    @Scheduled(cron = "30 59 23 * * *", zone = "America/Argentina/Buenos_Aires")
     public void autoMonthlyEndOfMonth() {
         ZoneId zone = ZoneId.of("America/Argentina/Buenos_Aires");
         LocalDate now = LocalDate.now(zone);

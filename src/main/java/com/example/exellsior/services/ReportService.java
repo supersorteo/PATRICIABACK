@@ -1,8 +1,12 @@
 package com.example.exellsior.services;
 
+import com.example.exellsior.dto.ClientDTO;
 import com.example.exellsior.dto.PagedResponse;
 import com.example.exellsior.entity.Report;
 import com.example.exellsior.repository.ReportRepository;
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -14,11 +18,16 @@ import java.time.OffsetDateTime;
 import java.time.YearMonth;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
+@Slf4j
 @Service
 public class ReportService {
+
+    private final ObjectMapper mapper = new ObjectMapper();
 
     @Autowired private ReportRepository reportRepository;
     @Autowired private DailyReportService dailyReportService;
@@ -92,7 +101,41 @@ public class ReportService {
     }
 
     public void deleteReport(Long id) {
+        Report report = reportRepository.findById(id)
+                .orElseThrow(() -> new IllegalArgumentException("Reporte no encontrado: " + id));
+
+        if (Boolean.TRUE.equals(report.getDailyFinal()) && "DAILY".equalsIgnoreCase(report.getPeriodType())) {
+            String monthKey = report.getPeriodKey().substring(0, 7); // yyyy-MM
+            if (reportRepository.existsByPeriodTypeAndPeriodKey("MONTHLY", monthKey)) {
+                throw new IllegalStateException(
+                        "No se puede eliminar el reporte diario final de " + report.getPeriodKey()
+                        + " — el reporte mensual de " + monthKey + " ya fue generado con este diario.");
+            }
+        }
+
         reportRepository.deleteById(id);
+    }
+
+    public List<ClientDTO> getClientsFromDailyReportsByDateRange(LocalDate from, LocalDate to) {
+        String fromKey = from.format(DateTimeFormatter.ISO_DATE);
+        String toKey = to.format(DateTimeFormatter.ISO_DATE);
+        List<Report> reports = reportRepository.findFinalDailyByPeriodKeyRange(fromKey, toKey);
+        List<ClientDTO> result = new ArrayList<>();
+        for (Report r : reports) {
+            if (r.getFilteredClients() == null || r.getFilteredClients().isBlank()) continue;
+            try {
+                List<Map<String, Object>> clients = mapper.readValue(
+                        r.getFilteredClients(), new TypeReference<>() {});
+                for (Map<String, Object> m : clients) {
+                    ClientDTO dto = ClientDTO.fromMap(m);
+                    if (dto != null) result.add(dto);
+                }
+            } catch (Exception e) {
+                log.warn("[REPORT-FALLBACK] Error parseando filteredClients reporte id={} periodKey={}",
+                        r.getId(), r.getPeriodKey());
+            }
+        }
+        return result;
     }
 
     private YearMonth resolveYearMonth(Report report) {
