@@ -11,66 +11,86 @@ import org.springframework.context.event.EventListener;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.web.server.ResponseStatusException;
-import org.springframework.http.HttpStatus;
 
 import java.time.LocalDate;
 import java.time.LocalTime;
 import java.time.ZoneId;
-import java.time.format.DateTimeFormatter;
-import java.time.format.DateTimeParseException;
 import java.util.Objects;
 
 @Slf4j
 @Service
 public class ReportScheduleService {
 
-    private static final Long SETTINGS_ID = 1L;
-    private static final ZoneId REPORT_ZONE = ZoneId.of("America/Argentina/Buenos_Aires");
-    private static final DateTimeFormatter TIME_FORMATTER = DateTimeFormatter.ofPattern("HH:mm");
+    @Autowired
+    private DailyReportService dailyReportService;
+
+    @Autowired
+    private OperationalTimeService operationalTimeService;
 
     @Autowired
     private ReportScheduleSettingsRepository settingsRepository;
 
-    @Autowired
-    private DailyReportService dailyReportService;
-
     @Transactional(readOnly = true)
     public ReportScheduleConfigDTO getConfig() {
-        return ReportScheduleConfigDTO.from(getOrCreateSettings());
+        ReportScheduleSettings settings = operationalTimeService.getOrCreateSettings();
+        return new ReportScheduleConfigDTO(
+                settings.isEnabled(),
+                settings.getDailySnapshotTime(),
+                operationalTimeService.getBusinessTimeZoneId(),
+                settings.getDailyCloseTime(),
+                settings.getLastSnapshotDay(),
+                settings.getLastCloseDay()
+        );
     }
 
     @Transactional
     public ReportScheduleConfigDTO updateConfig(ReportScheduleConfigDTO dto) {
-        ReportScheduleSettings settings = getOrCreateSettings();
+        ReportScheduleSettings settings = operationalTimeService.getOrCreateSettings();
         String previousTime = settings.getDailySnapshotTime();
         boolean previousEnabled = settings.isEnabled();
+        String previousZone = settings.getBusinessTimeZone();
 
-        String normalizedTime = normalizeTime(dto.dailySnapshotTime());
+        String normalizedTime = operationalTimeService.normalizeTimeOrNull(dto.dailySnapshotTime());
         boolean enabled = dto.enabled() && normalizedTime != null;
-        LocalDate today = LocalDate.now(REPORT_ZONE);
-        LocalTime nowTime = LocalTime.now(REPORT_ZONE).withSecond(0).withNano(0);
-        LocalTime configuredTime = parseConfiguredTime(normalizedTime);
+        String normalizedZone = operationalTimeService.normalizeBusinessTimeZone(dto.businessTimeZone());
+        String normalizedCloseTime = operationalTimeService.normalizeTimeOrDefault(
+                dto.dailyCloseTime(),
+                settings.getDailyCloseTime()
+        );
+        settings.setBusinessTimeZone(normalizedZone);
+        ZoneId effectiveZone = normalizedZone != null ? ZoneId.of(normalizedZone) : ZoneId.systemDefault();
+        LocalDate today = LocalDate.now(effectiveZone);
+        LocalTime nowTime = LocalTime.now(effectiveZone).withSecond(0).withNano(0);
+        LocalTime configuredTime = normalizedTime != null
+                ? LocalTime.parse(normalizedTime, OperationalTimeService.TIME_FORMATTER)
+                : null;
 
         settings.setDailySnapshotTime(normalizedTime);
         settings.setEnabled(enabled);
+        settings.setDailyCloseTime(normalizedCloseTime);
         if (!enabled) {
             settings.setLastSnapshotDay(null);
         } else if (dto.lastSnapshotDay() == null
                 || !Objects.equals(previousTime, normalizedTime)
+                || !Objects.equals(previousZone, normalizedZone)
                 || (!previousEnabled && enabled)) {
             settings.setLastSnapshotDay(shouldWaitUntilTomorrow(nowTime, configuredTime) ? today : null);
         } else {
             settings.setLastSnapshotDay(dto.lastSnapshotDay());
         }
 
-        ReportScheduleSettings saved = settingsRepository.save(settings);
-        log.info("[REPORT-SCHEDULE] Config actualizada enabled={} time={} lastSnapshotDay={}",
-                saved.isEnabled(), saved.getDailySnapshotTime(), saved.getLastSnapshotDay());
-        return ReportScheduleConfigDTO.from(saved);
+        ReportScheduleSettings finalSaved = settingsRepository.save(settings);
+        log.info("[REPORT-SCHEDULE] Config actualizada enabled={} time={} zone={} closeTime={} lastSnapshotDay={} lastCloseDay={}",
+                finalSaved.isEnabled(),
+                finalSaved.getDailySnapshotTime(),
+                finalSaved.getBusinessTimeZone(),
+                finalSaved.getDailyCloseTime(),
+                finalSaved.getLastSnapshotDay(),
+                finalSaved.getLastCloseDay());
+        return ReportScheduleConfigDTO.from(finalSaved);
     }
 
-    @Scheduled(cron = "0 * * * * *", zone = "America/Argentina/Buenos_Aires")
+    @Scheduled(cron = "0 * * * * *")
     public void runScheduledSnapshotCheck() {
         runScheduledSnapshotIfNeeded("SCHEDULED");
     }
@@ -82,21 +102,22 @@ public class ReportScheduleService {
 
     @Transactional
     protected void runScheduledSnapshotIfNeeded(String source) {
-        ReportScheduleSettings settings = getOrCreateSettings();
+        ReportScheduleSettings settings = operationalTimeService.getOrCreateSettings();
         if (!settings.isEnabled()) {
             return;
         }
 
-        LocalTime configuredTime = parseConfiguredTime(settings.getDailySnapshotTime());
-        if (configuredTime == null) {
+        String normalizedSnapshotTime = operationalTimeService.normalizeTimeOrNull(settings.getDailySnapshotTime());
+        if (normalizedSnapshotTime == null) {
             log.warn("[REPORT-SCHEDULE] Hora invalida o ausente. Se desactiva el scheduler.");
             settings.setEnabled(false);
             settingsRepository.save(settings);
             return;
         }
+        LocalTime configuredTime = LocalTime.parse(normalizedSnapshotTime, OperationalTimeService.TIME_FORMATTER);
 
-        LocalDate today = LocalDate.now(REPORT_ZONE);
-        LocalTime nowTime = LocalTime.now(REPORT_ZONE).withSecond(0).withNano(0);
+        LocalDate today = LocalDate.now(operationalTimeService.getBusinessZone());
+        LocalTime nowTime = LocalTime.now(operationalTimeService.getBusinessZone()).withSecond(0).withNano(0);
 
         boolean timeReached = !nowTime.isBefore(configuredTime);
         boolean alreadyGeneratedToday = today.equals(settings.getLastSnapshotDay());
@@ -113,40 +134,6 @@ public class ReportScheduleService {
                     source, today, report != null ? report.getId() : "null");
         } catch (Exception ex) {
             log.error("[REPORT-SCHEDULE] Error generando snapshot diario programado", ex);
-        }
-    }
-
-    private ReportScheduleSettings getOrCreateSettings() {
-        return settingsRepository.findById(SETTINGS_ID).orElseGet(() -> {
-            ReportScheduleSettings settings = new ReportScheduleSettings();
-            settings.setId(SETTINGS_ID);
-            settings.setEnabled(false);
-            settings.setDailySnapshotTime(null);
-            settings.setLastSnapshotDay(null);
-            return settingsRepository.save(settings);
-        });
-    }
-
-    private String normalizeTime(String rawTime) {
-        if (rawTime == null || rawTime.isBlank()) {
-            return null;
-        }
-
-        try {
-            return LocalTime.parse(rawTime.trim(), TIME_FORMATTER).format(TIME_FORMATTER);
-        } catch (DateTimeParseException ex) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Hora programada invalida. Use formato HH:mm");
-        }
-    }
-
-    private LocalTime parseConfiguredTime(String rawTime) {
-        if (rawTime == null || rawTime.isBlank()) {
-            return null;
-        }
-        try {
-            return LocalTime.parse(rawTime, TIME_FORMATTER);
-        } catch (DateTimeParseException ex) {
-            return null;
         }
     }
 

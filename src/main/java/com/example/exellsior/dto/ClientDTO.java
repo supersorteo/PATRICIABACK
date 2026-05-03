@@ -2,6 +2,7 @@ package com.example.exellsior.dto;
 
 import com.example.exellsior.entity.Client;
 import com.example.exellsior.entity.ClientVehicle;
+import com.example.exellsior.entity.ServiceHistory;
 
 import java.util.Date;
 import java.util.List;
@@ -70,6 +71,30 @@ public record ClientDTO(
                 c.getEntryTimestamp(),
                 c.getExitTimestamp(),
                 c.getLastDayClosed()
+        );
+    }
+
+    public static ClientDTO fromServiceHistory(ServiceHistory h) {
+        if (h == null) return null;
+        return new ClientDTO(
+                h.getSourceClientId(),
+                h.getCode(),
+                h.getName(),
+                h.getDni(),
+                h.getPhoneIntl(),
+                h.getPhoneRaw(),
+                h.getPlate(),
+                h.getNotes(),
+                h.getSpaceKey(),
+                h.getVehicle(),
+                h.getCategory(),
+                h.getPrice(),
+                List.of(),
+                h.getPaymentMethod(),
+                h.getClover(),
+                h.getEntryTimestamp() != null ? new Date(h.getEntryTimestamp()) : null,
+                h.getExitTimestamp(),
+                null
         );
     }
 

@@ -4,6 +4,7 @@ import com.example.exellsior.dto.ClientDTO;
 import com.example.exellsior.dto.PagedResponse;
 import com.example.exellsior.entity.Client;
 import com.example.exellsior.services.ClientService;
+import com.example.exellsior.services.OperationalTimeService;
 import com.example.exellsior.services.ReportService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
@@ -12,6 +13,7 @@ import org.springframework.web.bind.annotation.*;
 import java.time.LocalDate;
 import java.time.YearMonth;
 import java.time.ZoneId;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
@@ -24,6 +26,9 @@ public class ClientController {
 
     @Autowired
     private ReportService reportService;
+
+    @Autowired
+    private OperationalTimeService operationalTimeService;
 
     @GetMapping
     public List<ClientDTO> getAll() {
@@ -53,7 +58,7 @@ public class ClientController {
             @RequestParam(required = false) String month
     ) {
         YearMonth ym = (month == null || month.isBlank())
-                ? YearMonth.now(ZoneId.of("America/Argentina/Buenos_Aires"))
+                ? YearMonth.now(operationalTimeService.getBusinessZone())
                 : YearMonth.parse(month);
         return ResponseEntity.ok(clientService.getMonthlyServiceCountByDni(dni, ym));
     }
@@ -64,7 +69,7 @@ public class ClientController {
             @RequestParam(required = false) String month
     ) {
         YearMonth ym = (month == null || month.isBlank())
-                ? YearMonth.now(ZoneId.of("America/Argentina/Buenos_Aires"))
+                ? YearMonth.now(operationalTimeService.getBusinessZone())
                 : YearMonth.parse(month);
         return ResponseEntity.ok(clientService.getMonthlyServiceCountsByDnis(dnis, ym));
     }
@@ -81,20 +86,23 @@ public class ClientController {
     ) {
         LocalDate dateFrom = LocalDate.parse(from);
         LocalDate dateTo = LocalDate.parse(to);
+        LocalDate today = LocalDate.now(operationalTimeService.getBusinessZone());
 
-        List<ClientDTO> liveClients = clientService.getByDateRange(dateFrom, dateTo)
-                .stream().map(ClientDTO::fromSummary).toList();
-        if (!liveClients.isEmpty()) {
-            return ResponseEntity.ok(liveClients);
+        List<ClientDTO> result = new ArrayList<>();
+
+        // Días pasados: reporte final → si no existe, ServiceHistory
+        if (dateFrom.isBefore(today)) {
+            LocalDate pastTo = dateTo.isBefore(today) ? dateTo : today.minusDays(1);
+            result.addAll(reportService.getClientsFromDailyReportsByDateRange(dateFrom, pastTo));
         }
 
-        // No live data: fall back to daily report snapshots for closed past days
-        LocalDate today = LocalDate.now(ZoneId.of("America/Argentina/Buenos_Aires"));
-        if (dateTo.isBefore(today)) {
-            return ResponseEntity.ok(reportService.getClientsFromDailyReportsByDateRange(dateFrom, dateTo));
+        // Hoy: clientes vivos en la BD
+        if (!dateTo.isBefore(today) && !dateFrom.isAfter(today)) {
+            clientService.getByDateRange(today, today)
+                    .stream().map(ClientDTO::fromSummary).forEach(result::add);
         }
 
-        return ResponseEntity.ok(List.of());
+        return ResponseEntity.ok(result);
     }
 
     @GetMapping("/dni/{dni}")
@@ -136,6 +144,12 @@ public class ClientController {
     @DeleteMapping("/{id}")
     public ResponseEntity<Void> delete(@PathVariable Long id) {
         clientService.deleteClient(id);
+        return ResponseEntity.noContent().build();
+    }
+
+    @DeleteMapping("/{id}/service")
+    public ResponseEntity<Void> deleteService(@PathVariable Long id) {
+        clientService.deleteService(id);
         return ResponseEntity.noContent().build();
     }
 

@@ -3,6 +3,7 @@ package com.example.exellsior.controller;
 import com.example.exellsior.dto.PagedResponse;
 import com.example.exellsior.dto.ReportScheduleConfigDTO;
 import com.example.exellsior.entity.Report;
+import com.example.exellsior.services.OperationalTimeService;
 import com.example.exellsior.services.ReportScheduleService;
 import com.example.exellsior.services.ReportService;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -23,6 +24,8 @@ public class ReportController {
     private ReportService reportService;
     @Autowired
     private ReportScheduleService reportScheduleService;
+    @Autowired
+    private OperationalTimeService operationalTimeService;
 
 
 
@@ -90,7 +93,7 @@ public class ReportController {
 
     @PostMapping("/daily/finalize-and-close")
     public ResponseEntity<Void> finalizeDailyAndClose(@RequestParam(required = false) String day) {
-        ZoneId zone = ZoneId.of("America/Argentina/Buenos_Aires");
+        ZoneId zone = operationalTimeService.getBusinessZone();
         LocalDate targetDay = (day == null || day.isBlank())
                 ? LocalDate.now(zone)
                 : LocalDate.parse(day);

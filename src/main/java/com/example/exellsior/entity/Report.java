@@ -55,6 +55,9 @@ public class Report {
     @Column(name = "daily_final")
     private Boolean dailyFinal = false;
 
+    @Column(name = "report_type", length = 32)
+    private String reportType; // MANUAL | SCHEDULED | DAY_CLOSE | MONTHLY
+
     public Long getId() {
         return id;
     }
@@ -157,4 +160,7 @@ public class Report {
     public void setDailyFinal(Boolean dailyFinal) {
         this.dailyFinal = dailyFinal;
     }
+
+    public String getReportType() { return reportType; }
+    public void setReportType(String reportType) { this.reportType = reportType; }
 }

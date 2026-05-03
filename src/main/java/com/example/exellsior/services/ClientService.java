@@ -42,6 +42,9 @@ public class ClientService {
     @Autowired
     private ServiceHistoryService serviceHistoryService;
 
+    @Autowired
+    private OperationalTimeService operationalTimeService;
+
     @Transactional(readOnly = true)
     public List<Client> getAllClients() {
         return clientRepository.findAll();
@@ -237,6 +240,7 @@ public class ClientService {
 
         if (!clientIdsToDelete.isEmpty()) {
             clientVehicleRepository.deleteByClientIdIn(clientIdsToDelete);
+            serviceHistoryService.deleteBySourceClientIds(clientIdsToDelete);
         }
 
         clientsToDelete.forEach(c -> {
@@ -248,12 +252,43 @@ public class ClientService {
         clientRepository.deleteAll(clientsToDelete);
     }
 
+    @Transactional
+    public void deleteService(Long id) {
+        Client client = getById(id);
+
+        if (client.getSpaceKey() != null && !client.getSpaceKey().isBlank()) {
+            Space space = spaceRepository.findById(client.getSpaceKey()).orElse(null);
+            if (space != null) {
+                Long currentClientId = space.getClientId();
+                if (currentClientId != null && Objects.equals(currentClientId, client.getId())) {
+                    space.setOccupied(false);
+                    space.setHold(false);
+                    space.setClientId(null);
+                    space.setStartTime(null);
+                    space.setClient(null);
+                    spaceRepository.save(space);
+                }
+            }
+        }
+
+        if (client.getClientVehicles() != null) {
+            client.getClientVehicles().clear();
+        }
+
+        if (client.getId() != null) {
+            clientVehicleRepository.deleteByClientIdIn(Set.of(client.getId()));
+            serviceHistoryService.deleteBySourceClientIds(Set.of(client.getId()));
+        }
+
+        clientRepository.delete(client);
+    }
+
 
 
 
     @Transactional(readOnly = true)
     public List<Client> getByDateRange(LocalDate from, LocalDate to) {
-        ZoneId zone = ZoneId.of("America/Argentina/Buenos_Aires");
+        ZoneId zone = operationalTimeService.getBusinessZone();
         Date dateFrom = Date.from(from.atStartOfDay(zone).toInstant());
         Date dateTo = Date.from(to.plusDays(1).atStartOfDay(zone).toInstant());
         return clientRepository.findByEntryTimestampBetween(dateFrom, dateTo);
@@ -266,7 +301,7 @@ public class ClientService {
 
     @Transactional
     public void resetAllDataForDay(LocalDate operationalDay) {
-        ZoneId zone = ZoneId.of("America/Argentina/Buenos_Aires");
+        ZoneId zone = operationalTimeService.getBusinessZone();
         long nowMs = System.currentTimeMillis();
         long closeDayMarkerMs = operationalDay.atStartOfDay(zone).toInstant().toEpochMilli();
 
@@ -537,7 +572,7 @@ public class ClientService {
     public long getMonthlyServiceCountByDni(String dni, YearMonth ym) {
         if (dni == null || dni.trim().isEmpty()) return 0L;
 
-        ZoneId zone = ZoneId.of("America/Argentina/Buenos_Aires");
+        ZoneId zone = operationalTimeService.getBusinessZone();
 
         LocalDate start = ym.atDay(1);
         LocalDate end = ym.plusMonths(1).atDay(1);
@@ -572,7 +607,7 @@ public class ClientService {
 
         if (cleanDnis.isEmpty()) return result;
 
-        ZoneId zone = ZoneId.of("America/Argentina/Buenos_Aires");
+        ZoneId zone = operationalTimeService.getBusinessZone();
         LocalDate start = ym.atDay(1);
         LocalDate end = ym.plusMonths(1).atDay(1);
 

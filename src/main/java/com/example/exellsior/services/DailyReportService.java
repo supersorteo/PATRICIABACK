@@ -2,6 +2,7 @@ package com.example.exellsior.services;
 
 import com.example.exellsior.entity.Client;
 import com.example.exellsior.entity.Report;
+import com.example.exellsior.entity.ServiceHistory;
 import com.example.exellsior.entity.Space;
 import com.example.exellsior.entity.Subsuelo;
 import com.example.exellsior.repository.ClientRepository;
@@ -9,7 +10,6 @@ import com.example.exellsior.repository.ReportRepository;
 import com.example.exellsior.repository.SpaceRepository;
 import com.example.exellsior.repository.SubsueloRepository;
 import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -19,11 +19,13 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDate;
+import java.time.LocalTime;
 import java.time.OffsetDateTime;
 import java.time.YearMonth;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
+import java.util.stream.Collectors;
 
 @Slf4j
 @Service
@@ -35,49 +37,64 @@ public class DailyReportService {
     @Autowired private SubsueloRepository subsueloRepository;
     @Autowired private ClientService clientService;
     @Autowired private MonthlyReportService monthlyReportService;
+    @Autowired private ServiceHistoryService serviceHistoryService;
+    @Autowired private OperationalTimeService operationalTimeService;
 
     private final ObjectMapper mapper = new ObjectMapper();
 
+    // ─── PUBLIC API ───────────────────────────────────────────────────────────
+
+    /** Called by ReportScheduleService at configured time → SCHEDULED snapshot */
     public Report upsertDailySnapshotForDay(LocalDate day) {
-        return saveDailyReportForDay(day, false);
+        return saveDailySnapshotReport(day, "SCHEDULED");
     }
 
-    public Report finalizeDailyReportForDay(LocalDate day) {
-        return saveDailyReportForDay(day, true);
-    }
-
+    /** Day-close: capture space stats → reset → build DAY_CLOSE from ServiceHistory */
     public void finalizeDailyReportAndResetDay(LocalDate day) {
-        Report r = finalizeDailyReportForDay(day);
-        log.info("[DAILY-CLOSE] day={} reportId={}", day, r != null ? r.getId() : "null");
+        SpaceStats spaceStats = captureSpaceStats();
+        log.info("[DAY-CLOSE] day={} Iniciando reset. Espacios ocupados antes: {}", day, spaceStats.occupiedSpaces);
         clientService.resetAllDataForDay(day);
+        log.info("[DAY-CLOSE] day={} Reset completo. Generando DAY_CLOSE desde ServiceHistory", day);
+        Report r = generateDayCloseFromServiceHistory(day, spaceStats);
+        operationalTimeService.markLastCloseDay(day);
+        generateMonthlyIfMonthEnded(day);
+        log.info("[DAY-CLOSE] day={} reportId={}", day, r != null ? r.getId() : "null");
     }
 
-    @Scheduled(cron = "0 59 23 * * *", zone = "America/Argentina/Buenos_Aires")
+    /** Used by catch-up on startup: clients already reset, read ServiceHistory */
+    public Report finalizeDailyReportForDay(LocalDate day) {
+        Report report = generateDayCloseFromServiceHistory(day, null);
+        operationalTimeService.markLastCloseDay(day);
+        generateMonthlyIfMonthEnded(day);
+        return report;
+    }
+
+    // ─── SCHEDULED ────────────────────────────────────────────────────────────
+
+    @Scheduled(cron = "0 * * * * *")
     public void autoDailyCloseEndOfDay() {
-        ZoneId zone = ZoneId.of("America/Argentina/Buenos_Aires");
+        ZoneId zone = operationalTimeService.getBusinessZone();
         LocalDate today = LocalDate.now(zone);
+        LocalTime nowTime = LocalTime.now(zone).withSecond(0).withNano(0);
+        LocalTime closeTime = operationalTimeService.getDailyCloseTime();
 
-        runDailyCloseIfNeeded("SCHEDULED");
-
-        boolean isLastDayOfMonth = !today.getMonth().equals(today.plusDays(1).getMonth());
-        if (isLastDayOfMonth) {
-            YearMonth ym = YearMonth.from(today);
-            log.info("[MONTHLY-AUTO] Fin de mes detectado. Generando mensual para {}", ym);
-            try {
-                monthlyReportService.generateFromDailyReports(ym);
-                log.info("[MONTHLY-AUTO] Mensual OK para {}", ym);
-            } catch (Exception e) {
-                log.error("[MONTHLY-AUTO] Error generando mensual para {}", ym, e);
-            }
+        if (!nowTime.equals(closeTime)) {
+            return;
         }
+
+        if (today.equals(maxDay(operationalTimeService.getLastCloseDay(), getLastClosedDay(zone)))) {
+            return;
+        }
+
+        closeOperationalDay(today, true, "SCHEDULED");
     }
 
     @EventListener(ApplicationReadyEvent.class)
     public void catchUpDailyCloseOnStartup() {
-        ZoneId zone = ZoneId.of("America/Argentina/Buenos_Aires");
+        ZoneId zone = operationalTimeService.getBusinessZone();
         LocalDate today = LocalDate.now(zone);
         LocalDate yesterday = today.minusDays(1);
-        LocalDate lastClosedDay = getLastClosedDay(zone);
+        LocalDate lastClosedDay = maxDay(operationalTimeService.getLastCloseDay(), getLastClosedDay(zone));
         LocalDate startDay = (lastClosedDay == null) ? yesterday : lastClosedDay.plusDays(1);
 
         if (startDay.isAfter(yesterday)) {
@@ -89,71 +106,41 @@ public class DailyReportService {
 
         LocalDate day = startDay;
         while (!day.isAfter(yesterday)) {
-            log.info("[DAILY-CATCHUP] Cerrando dia: {}", day);
-            try {
-                try {
-                    finalizeDailyReportForDay(day);
-                    log.info("[DAILY-CATCHUP] Reporte OK para {}", day);
-                } catch (Exception e) {
-                    log.error("[DAILY-CATCHUP] Fallo reporte para {}, continua reset", day, e);
-                }
-                clientService.resetAllDataForDay(day);
-                log.info("[DAILY-CATCHUP] Reset OK para {}", day);
-            } catch (Exception e) {
-                log.error("[DAILY-CATCHUP] Error en reset para {}", day, e);
-                break;
-            }
+            boolean resetLiveState = day.equals(yesterday) && hasPendingOperationalStateForDay(day, zone);
+            closeOperationalDay(day, resetLiveState, "STARTUP");
             day = day.plusDays(1);
         }
     }
 
-    private Report saveDailyReportForDay(LocalDate day, boolean dailyFinal) {
-        ZoneId zone = ZoneId.of("America/Argentina/Buenos_Aires");
+    // ─── PRIVATE: SNAPSHOT (MANUAL / SCHEDULED) ──────────────────────────────
+
+    private Report saveDailySnapshotReport(LocalDate day, String reportType) {
+        ZoneId zone = operationalTimeService.getBusinessZone();
         String periodKey = day.format(DateTimeFormatter.ISO_DATE);
 
         Date[] range = dayRange(day, zone);
-        List<Client> todayClients = clientRepository.findByEntryTimestampBetween(range[0], range[1]);
-        List<Report> sameDayReports = reportRepository.findAllByPeriodTypeAndPeriodKey("DAILY", periodKey);
-
-        Optional<Report> existingFinal = sameDayReports.stream()
-                .filter(r -> Boolean.TRUE.equals(r.getDailyFinal()))
-                .max(Comparator.comparing(Report::getTimestamp, Comparator.nullsLast(String::compareTo)));
-        if (existingFinal.isPresent()) {
-            log.info("[DAILY-IDEMPOTENT] Final ya existe para {}. Operación ignorada (solicitado final={}). Se conserva id={}.",
-                    periodKey, dailyFinal, existingFinal.get().getId());
-            return existingFinal.get();
-        }
-
-        List<Map<String, Object>> currentClients = snapshotClients(todayClients);
-        List<Map<String, Object>> existingClients = new ArrayList<>();
-        for (Report report : sameDayReports) {
-            existingClients.addAll(parseJsonSafe(report.getFilteredClients()));
-        }
-
-        List<Map<String, Object>> mergedClients = mergeAndDedup(existingClients, currentClients);
-        if (sameDayReports.isEmpty() && mergedClients.isEmpty()) {
-            log.info("[DAILY-REPORT] No hay datos para el dia {}", periodKey);
-            return null;
-        }
+        List<Client> activeClients = clientRepository.findByEntryTimestampBetween(range[0], range[1]);
+        List<Map<String, Object>> clientSnapshot = snapshotClients(activeClients);
 
         List<Space> spaces = spaceRepository.findAll();
         List<Subsuelo> subsuelos = subsueloRepository.findAll();
 
-        int totalSpaces = spaces.size();
+        int totalSpaces    = spaces.size();
         int occupiedSpaces = (int) spaces.stream().filter(Space::isOccupied).count();
-        int freeSpaces = totalSpaces - occupiedSpaces;
-        int occupancyRate = totalSpaces > 0 ? Math.round((occupiedSpaces * 100f) / totalSpaces) : 0;
+        int freeSpaces     = totalSpaces - occupiedSpaces;
+        int occupancyRate  = totalSpaces > 0 ? Math.round((occupiedSpaces * 100f) / totalSpaces) : 0;
 
-        Map<String, Long> paymentAmounts = buildPaymentAmounts(mergedClients);
-        long totalCobrado = paymentAmounts.values().stream().mapToLong(Long::longValue).sum();
-        Map<String, Integer> timeStats = buildTimeStats(mergedClients);
-        List<Map<String, Object>> subsueloStats = buildSubsueloStats(subsuelos, spaces);
+        Map<String, Long>         paymentAmounts = buildPaymentAmounts(clientSnapshot);
+        long                      totalCobrado   = paymentAmounts.values().stream().mapToLong(Long::longValue).sum();
+        Map<String, Integer>      timeStats      = buildTimeStats(clientSnapshot);
+        List<Map<String, Object>> subsueloStats  = buildSubsueloStats(subsuelos, spaces);
 
         Report report = new Report();
         report.setTimestamp(OffsetDateTime.now(zone).toString());
         report.setPeriodType("DAILY");
         report.setPeriodKey(periodKey);
-        report.setDailyFinal(dailyFinal);
+        report.setReportType(reportType);
+        report.setDailyFinal(false);
         report.setTotalSpaces(totalSpaces);
         report.setOccupiedSpaces(occupiedSpaces);
         report.setFreeSpaces(freeSpaces);
@@ -161,59 +148,299 @@ public class DailyReportService {
         report.setTotalCobrado(totalCobrado);
 
         try {
-            report.setSubsueloStats(mapper.writeValueAsString(subsueloStats));
-            report.setFilteredClients(mapper.writeValueAsString(mergedClients));
+            report.setFilteredClients(mapper.writeValueAsString(clientSnapshot));
             report.setPaymentAmounts(mapper.writeValueAsString(paymentAmounts));
             report.setTimeStats(mapper.writeValueAsString(timeStats));
+            report.setSubsueloStats(mapper.writeValueAsString(subsueloStats));
         } catch (JsonProcessingException e) {
-            throw new RuntimeException("Error serializando reporte diario", e);
-        }
-
-        List<Report> reportsToReplace = dailyFinal
-                ? sameDayReports
-                : sameDayReports.stream().filter(r -> !Boolean.TRUE.equals(r.getDailyFinal())).toList();
-        if (!reportsToReplace.isEmpty()) {
-            reportRepository.deleteAll(reportsToReplace);
+            throw new RuntimeException("Error serializando snapshot diario", e);
         }
 
         Report saved = reportRepository.save(report);
-        log.info("[DAILY-REPORT] Guardado. day={} final={} reportId={} clientes={}",
-                periodKey, dailyFinal, saved.getId(), mergedClients.size());
+        log.info("[SNAPSHOT] type={} day={} clients={} id={}", reportType, periodKey, clientSnapshot.size(), saved.getId());
         return saved;
     }
 
-    private void runDailyCloseIfNeeded(String source) {
-        ZoneId zone = ZoneId.of("America/Argentina/Buenos_Aires");
-        LocalDate today = LocalDate.now(zone);
-        long todayStartMs = today.atStartOfDay(zone).toInstant().toEpochMilli();
-        boolean staleOccupied = spaceRepository.existsByOccupiedTrueAndStartTimeLessThan(todayStartMs);
+    // ─── PRIVATE: DAY_CLOSE from ServiceHistory ───────────────────────────────
 
-        if ("STARTUP".equals(source) && !staleOccupied) {
-            log.info("[DAILY-CATCHUP] No hay espacios pendientes.");
+    private Report generateDayCloseFromServiceHistory(LocalDate day, SpaceStats spaceStats) {
+        ZoneId zone = operationalTimeService.getBusinessZone();
+        String periodKey = day.format(DateTimeFormatter.ISO_DATE);
+
+        List<ServiceHistory> histories = serviceHistoryService.getByDateRange(day, day);
+        List<Map<String, Object>> clients = histories.stream()
+                .map(this::serviceHistoryToMap)
+                .collect(Collectors.toList());
+
+        Map<String, Long>    paymentAmounts = buildPaymentAmountsFromHistory(histories);
+        long                 totalCobrado   = paymentAmounts.values().stream().mapToLong(Long::longValue).sum();
+        Map<String, Integer> timeStats      = buildTimeStatsFromHistory(histories);
+
+        int totalSpaces = 0, occupiedSpaces = 0, freeSpaces = 0, occupancyRate = 0;
+        List<Map<String, Object>> subsueloStats = List.of();
+        if (spaceStats != null) {
+            totalSpaces    = spaceStats.totalSpaces;
+            occupiedSpaces = spaceStats.occupiedSpaces;
+            freeSpaces     = spaceStats.freeSpaces;
+            occupancyRate  = spaceStats.occupancyRate;
+            subsueloStats  = spaceStats.subsueloStats;
+        }
+
+        Report report = reportRepository
+                .findByPeriodTypeAndPeriodKeyAndReportType("DAILY", periodKey, "DAY_CLOSE")
+                .orElse(new Report());
+        report.setTimestamp(OffsetDateTime.now(zone).toString());
+        report.setPeriodType("DAILY");
+        report.setPeriodKey(periodKey);
+        report.setReportType("DAY_CLOSE");
+        report.setDailyFinal(true);
+        report.setTotalSpaces(totalSpaces);
+        report.setOccupiedSpaces(occupiedSpaces);
+        report.setFreeSpaces(freeSpaces);
+        report.setOccupancyRate(occupancyRate);
+        report.setTotalCobrado(totalCobrado);
+
+        try {
+            report.setFilteredClients(mapper.writeValueAsString(clients));
+            report.setPaymentAmounts(mapper.writeValueAsString(paymentAmounts));
+            report.setTimeStats(mapper.writeValueAsString(timeStats));
+            report.setSubsueloStats(mapper.writeValueAsString(subsueloStats));
+        } catch (JsonProcessingException e) {
+            throw new RuntimeException("Error serializando DAY_CLOSE", e);
+        }
+
+        Report saved = reportRepository.save(report);
+        log.info("[DAY-CLOSE] day={} clients={} totalCobrado={} id={}", periodKey, clients.size(), totalCobrado, saved.getId());
+        return saved;
+    }
+
+    // ─── PRIVATE: SCHEDULED CLOSE HELPER ─────────────────────────────────────
+
+    private void closeOperationalDay(LocalDate day, boolean resetLiveState, String source) {
+        log.info("[DAILY-CLOSE] source={} targetDay={} resetLiveState={}", source, day, resetLiveState);
+        try {
+            if (resetLiveState) {
+                finalizeDailyReportAndResetDay(day);
+            } else {
+                finalizeDailyReportForDay(day);
+            }
+            log.info("[DAILY-CLOSE] Cierre OK para {}", day);
+        } catch (Exception e) {
+            log.error("[DAILY-CLOSE] Error durante el cierre del dia {}", day, e);
+        }
+    }
+
+    private boolean hasPendingOperationalStateForDay(LocalDate day, ZoneId zone) {
+        long nextDayStartMs = day.plusDays(1).atStartOfDay(zone).toInstant().toEpochMilli();
+        return spaceRepository.existsByOccupiedTrueAndStartTimeLessThan(nextDayStartMs);
+    }
+
+    private void generateMonthlyIfMonthEnded(LocalDate day) {
+        boolean isLastDayOfMonth = !day.getMonth().equals(day.plusDays(1).getMonth());
+        if (!isLastDayOfMonth) {
             return;
         }
 
-        LocalDate targetDay = "STARTUP".equals(source) ? today.minusDays(1) : today;
-        log.info("[DAILY-CLOSE] source={} targetDay={} staleOccupied={}", source, targetDay, staleOccupied);
-
+        YearMonth ym = YearMonth.from(day);
+        log.info("[MONTHLY-AUTO] Fin de mes detectado. Generando mensual para {}", ym);
         try {
-            try {
-                finalizeDailyReportForDay(targetDay);
-                log.info("[DAILY-CLOSE] Reporte OK para {}", targetDay);
-            } catch (Exception e) {
-                log.error("[DAILY-CLOSE] Fallo reporte, continua reset", e);
-            }
-            clientService.resetAllDataForDay(targetDay);
-            log.info("[DAILY-CLOSE] Reset OK para {}", targetDay);
+            monthlyReportService.generateFromDailyReports(ym);
+            log.info("[MONTHLY-AUTO] Mensual OK para {}", ym);
         } catch (Exception e) {
-            log.error("[DAILY-CLOSE] Error durante reset", e);
+            log.error("[MONTHLY-AUTO] Error generando mensual para {}", ym, e);
         }
     }
+
+    // ─── PRIVATE: SPACE STATS CAPTURE ────────────────────────────────────────
+
+    private SpaceStats captureSpaceStats() {
+        List<Space> spaces = spaceRepository.findAll();
+        List<Subsuelo> subsuelos = subsueloRepository.findAll();
+        SpaceStats s = new SpaceStats();
+        s.totalSpaces    = spaces.size();
+        s.occupiedSpaces = (int) spaces.stream().filter(Space::isOccupied).count();
+        s.freeSpaces     = s.totalSpaces - s.occupiedSpaces;
+        s.occupancyRate  = s.totalSpaces > 0 ? Math.round((s.occupiedSpaces * 100f) / s.totalSpaces) : 0;
+        s.subsueloStats  = buildSubsueloStats(subsuelos, spaces);
+        return s;
+    }
+
+    private static class SpaceStats {
+        int totalSpaces, occupiedSpaces, freeSpaces, occupancyRate;
+        List<Map<String, Object>> subsueloStats;
+    }
+
+    // ─── PRIVATE: BUILDERS ────────────────────────────────────────────────────
+
+    private Map<String, Object> serviceHistoryToMap(ServiceHistory h) {
+        Map<String, Object> row = new LinkedHashMap<>();
+        row.put("id",             h.getSourceClientId());
+        row.put("code",           h.getCode());
+        row.put("name",           h.getName());
+        row.put("dni",            h.getDni());
+        row.put("phoneIntl",      h.getPhoneIntl());
+        row.put("phoneRaw",       h.getPhoneRaw());
+        row.put("plate",          h.getPlate());
+        row.put("notes",          h.getNotes());
+        row.put("spaceKey",       h.getSpaceKey());
+        row.put("vehicle",        h.getVehicle());
+        row.put("category",       h.getCategory());
+        row.put("price",          h.getPrice());
+        row.put("paymentMethod",  h.getPaymentMethod());
+        row.put("clover",         h.getClover());
+        row.put("entryTimestamp", h.getEntryTimestamp());
+        row.put("exitTimestamp",  h.getExitTimestamp());
+        row.put("spaceDisplayName", h.getSpaceKey() != null ? h.getSpaceKey() : "-");
+        return row;
+    }
+
+    private Map<String, Long> buildPaymentAmountsFromHistory(List<ServiceHistory> histories) {
+        Map<String, Long> amounts = new LinkedHashMap<>();
+        for (String k : List.of("efectivo", "credito", "prepago", "qr", "debito", "scaneo", "S/Cargo", "otros")) {
+            amounts.put(k, 0L);
+        }
+        for (ServiceHistory h : histories) {
+            long amount = h.getPrice() != null ? h.getPrice().longValue() : 0L;
+            String raw  = h.getPaymentMethod();
+            String key  = raw == null ? "otros" : switch (raw.toLowerCase()) {
+                case "efectivo" -> "efectivo";
+                case "credito"  -> "credito";
+                case "prepago"  -> "prepago";
+                case "qr"       -> "qr";
+                case "debito"   -> "debito";
+                case "scaneo"   -> "scaneo";
+                default -> "S/Cargo".equals(raw) ? "S/Cargo" : "otros";
+            };
+            amounts.put(key, amounts.get(key) + amount);
+        }
+        return amounts;
+    }
+
+    private Map<String, Integer> buildTimeStatsFromHistory(List<ServiceHistory> histories) {
+        Map<String, Integer> stats = new LinkedHashMap<>();
+        stats.put("under1h", 0);
+        stats.put("between1h3h", 0);
+        stats.put("over3h", 0);
+        for (ServiceHistory h : histories) {
+            Long entryTs = h.getEntryTimestamp();
+            Long exitTs  = h.getExitTimestamp();
+            if (entryTs == null || exitTs == null || exitTs <= entryTs) continue;
+            double hours = (exitTs - entryTs) / 3600000.0;
+            if (hours < 1)       stats.merge("under1h",     1, Integer::sum);
+            else if (hours <= 3) stats.merge("between1h3h", 1, Integer::sum);
+            else                 stats.merge("over3h",       1, Integer::sum);
+        }
+        return stats;
+    }
+
+    private List<Map<String, Object>> snapshotClients(List<Client> clients) {
+        List<Map<String, Object>> result = new ArrayList<>();
+        for (Client c : clients) {
+            Map<String, Object> row = new LinkedHashMap<>();
+            row.put("id",             c.getId());
+            row.put("code",           c.getCode());
+            row.put("name",           c.getName());
+            row.put("dni",            c.getDni());
+            row.put("phoneIntl",      c.getPhoneIntl());
+            row.put("phoneRaw",       c.getPhoneRaw());
+            row.put("plate",          c.getPlate());
+            row.put("notes",          c.getNotes());
+            row.put("spaceKey",       c.getSpaceKey());
+            row.put("vehicle",        c.getVehicle());
+            row.put("category",       c.getCategory());
+            row.put("price",          c.getPrice());
+            row.put("paymentMethod",  c.getPaymentMethod());
+            row.put("clover",         c.getClover());
+            row.put("entryTimestamp", c.getEntryTimestamp() != null ? c.getEntryTimestamp().getTime() : null);
+            row.put("exitTimestamp",  c.getExitTimestamp());
+            row.put("spaceDisplayName", c.getSpaceKey() != null ? c.getSpaceKey() : "-");
+            result.add(row);
+        }
+        return result;
+    }
+
+    private Map<String, Long> buildPaymentAmounts(List<Map<String, Object>> clients) {
+        Map<String, Long> paymentAmounts = new LinkedHashMap<>();
+        for (String key : List.of("efectivo", "credito", "prepago", "qr", "debito", "scaneo", "S/Cargo", "otros")) {
+            paymentAmounts.put(key, 0L);
+        }
+        for (Map<String, Object> client : clients) {
+            String method = String.valueOf(client.getOrDefault("paymentMethod", "otros"));
+            long amount = 0L;
+            try { amount = Long.parseLong(String.valueOf(client.getOrDefault("price", 0))); } catch (Exception ignored) {}
+            String lower = method.toLowerCase();
+            String key = switch (lower) {
+                case "efectivo" -> "efectivo";
+                case "credito"  -> "credito";
+                case "prepago"  -> "prepago";
+                case "qr"       -> "qr";
+                case "debito"   -> "debito";
+                case "scaneo"   -> "scaneo";
+                default -> "S/Cargo".equals(method) ? "S/Cargo" : "otros";
+            };
+            paymentAmounts.put(key, paymentAmounts.get(key) + amount);
+        }
+        return paymentAmounts;
+    }
+
+    private Map<String, Integer> buildTimeStats(List<Map<String, Object>> clients) {
+        Map<String, Integer> stats = new LinkedHashMap<>();
+        stats.put("under1h", 0);
+        stats.put("between1h3h", 0);
+        stats.put("over3h", 0);
+        long now = System.currentTimeMillis();
+        for (Map<String, Object> client : clients) {
+            Long entryTs = normalizeEpoch(client.get("entryTimestamp"));
+            if (entryTs == null) continue;
+            Long exitTs = normalizeEpoch(client.get("exitTimestamp"));
+            long endTs  = (exitTs != null && exitTs > entryTs) ? exitTs : now;
+            double hours = (endTs - entryTs) / 3600000.0;
+            if (hours < 1)       stats.merge("under1h",     1, Integer::sum);
+            else if (hours <= 3) stats.merge("between1h3h", 1, Integer::sum);
+            else                 stats.merge("over3h",       1, Integer::sum);
+        }
+        return stats;
+    }
+
+    private List<Map<String, Object>> buildSubsueloStats(List<Subsuelo> subsuelos, List<Space> spaces) {
+        Map<String, int[]> accumulator = new LinkedHashMap<>();
+        for (Subsuelo subsuelo : subsuelos) accumulator.put(subsuelo.getId(), new int[]{0, 0});
+        for (Space space : spaces) {
+            String subsueloId = space.getSubsueloId();
+            if (subsueloId == null) continue;
+            int[] counts = accumulator.computeIfAbsent(subsueloId, ignored -> new int[]{0, 0});
+            counts[0] += 1;
+            if (space.isOccupied()) counts[1] += 1;
+        }
+        List<Map<String, Object>> result = new ArrayList<>();
+        for (Subsuelo subsuelo : subsuelos) {
+            int[] counts = accumulator.getOrDefault(subsuelo.getId(), new int[]{0, 0});
+            int total = counts[0], occupied = counts[1], free = total - occupied;
+            int rate  = total > 0 ? Math.round((occupied * 100f) / total) : 0;
+            Map<String, Object> row = new LinkedHashMap<>();
+            row.put("id",           subsuelo.getId());
+            row.put("label",        subsuelo.getLabel());
+            row.put("total",        total);
+            row.put("occupied",     occupied);
+            row.put("free",         free);
+            row.put("occupancyRate", rate);
+            result.add(row);
+        }
+        return result;
+    }
+
+    // ─── PRIVATE: UTILS ──────────────────────────────────────────────────────
 
     private LocalDate getLastClosedDay(ZoneId zone) {
         Long ms = clientRepository.findMaxLastDayClosed();
         if (ms == null || ms <= 0L) return null;
         return new Date(ms).toInstant().atZone(zone).toLocalDate();
+    }
+
+    private LocalDate maxDay(LocalDate left, LocalDate right) {
+        if (left == null) return right;
+        if (right == null) return left;
+        return left.isAfter(right) ? left : right;
     }
 
     private Date[] dayRange(LocalDate day, ZoneId zone) {
@@ -223,265 +450,14 @@ public class DailyReportService {
         };
     }
 
-    private List<Map<String, Object>> snapshotClients(List<Client> clients) {
-        List<Map<String, Object>> result = new ArrayList<>();
-        for (Client c : clients) {
-            Map<String, Object> row = new LinkedHashMap<>();
-            row.put("id", c.getId());
-            row.put("code", c.getCode());
-            row.put("name", c.getName());
-            row.put("dni", c.getDni());
-            row.put("phoneIntl", c.getPhoneIntl());
-            row.put("phoneRaw", c.getPhoneRaw());
-            row.put("plate", c.getPlate());
-            row.put("notes", c.getNotes());
-            row.put("spaceKey", c.getSpaceKey());
-            row.put("vehicle", c.getVehicle());
-            row.put("category", c.getCategory());
-            row.put("price", c.getPrice());
-            row.put("paymentMethod", c.getPaymentMethod());
-            row.put("clover", c.getClover());
-            row.put("entryTimestamp", c.getEntryTimestamp() != null ? c.getEntryTimestamp().getTime() : null);
-            row.put("exitTimestamp", c.getExitTimestamp());
-            row.put("spaceDisplayName", c.getSpaceKey() != null ? c.getSpaceKey() : "-");
-            result.add(row);
-        }
-        return result;
-    }
-
-    private List<Map<String, Object>> parseJsonSafe(String json) {
-        if (json == null || json.isBlank()) return new ArrayList<>();
-        try {
-            return mapper.readValue(json, new TypeReference<>() {});
-        } catch (Exception e) {
-            return new ArrayList<>();
-        }
-    }
-
-    private List<Map<String, Object>> mergeAndDedup(List<Map<String, Object>> existing, List<Map<String, Object>> current) {
-        // Only keep exited clients from existing snapshots — active clients (no exitTimestamp) must
-        // come from the DB so that manual deletions are immediately reflected in the report.
-        List<Map<String, Object>> exitedFromExisting = existing == null ? List.of() :
-                existing.stream()
-                        .filter(m -> normalizeEpoch(m.get("exitTimestamp")) != null)
-                        .toList();
-
-        List<Map<String, Object>> merged = new ArrayList<>();
-        merged.addAll(exitedFromExisting);
-        if (current != null) merged.addAll(current);
-
-        Map<String, Map<String, Object>> dedup = new LinkedHashMap<>();
-        for (Map<String, Object> client : merged) {
-            String key = buildClientSnapshotKey(client);
-            Map<String, Object> previous = dedup.get(key);
-            dedup.put(key, previous == null ? client : mergeClientSnapshots(previous, client));
-        }
-        List<Map<String, Object>> result = new ArrayList<>(dedup.values());
-        result.sort((a, b) -> Long.compare(
-                extractComparableTimestamp(b),
-                extractComparableTimestamp(a)
-        ));
-        return result;
-    }
-
-    private String buildClientSnapshotKey(Map<String, Object> client) {
-        Long entryTs = normalizeEpoch(client.get("entryTimestamp"));
-        String code = normalizeText(client.get("code"));
-        String dni = normalizeText(client.get("dni"));
-        String phone = normalizeDigits(client.get("phoneIntl"));
-        String name = normalizeText(client.get("name"));
-        String vehicle = normalizeText(client.get("vehicle"));
-        String plate = normalizeText(client.get("plate"));
-        String id = normalizeText(client.get("id"));
-
-        if (code != null || entryTs != null) {
-            return "code:" + (code != null ? code : "x") + "|entry:" + (entryTs != null ? entryTs : "x");
-        }
-
-        if (dni != null || phone != null || name != null) {
-            return "fallback:" +
-                    (dni != null ? dni : "x") + "|" +
-                    (phone != null ? phone : "x") + "|" +
-                    (name != null ? name : "x") + "|" +
-                    (entryTs != null ? entryTs : "x") + "|" +
-                    (vehicle != null ? vehicle : "x") + "|" +
-                    (plate != null ? plate : "x");
-        }
-
-        return "id:" + (id != null ? id : "x") + "|entry:" + (entryTs != null ? entryTs : "x");
-    }
-
-    private Map<String, Object> mergeClientSnapshots(Map<String, Object> previous, Map<String, Object> incoming) {
-        Map<String, Object> merged = new LinkedHashMap<>(previous);
-        for (Map.Entry<String, Object> entry : incoming.entrySet()) {
-            Object value = entry.getValue();
-            if (isMeaningfulValue(value)) {
-                merged.put(entry.getKey(), value);
-            }
-        }
-
-        Long previousExit = normalizeEpoch(previous.get("exitTimestamp"));
-        Long incomingExit = normalizeEpoch(incoming.get("exitTimestamp"));
-        if (previousExit != null || incomingExit != null) {
-            merged.put("exitTimestamp", incomingExit != null ? incomingExit : previousExit);
-        }
-
-        Long previousEntry = normalizeEpoch(previous.get("entryTimestamp"));
-        Long incomingEntry = normalizeEpoch(incoming.get("entryTimestamp"));
-        if (previousEntry != null || incomingEntry != null) {
-            merged.put("entryTimestamp", incomingEntry != null ? incomingEntry : previousEntry);
-        }
-
-        return merged;
-    }
-
-    private long extractComparableTimestamp(Map<String, Object> client) {
-        Long entry = normalizeEpoch(client.get("entryTimestamp"));
-        if (entry != null) return entry;
-        Long exit = normalizeEpoch(client.get("exitTimestamp"));
-        return exit != null ? exit : 0L;
-    }
-
     private Long normalizeEpoch(Object value) {
         if (value == null) return null;
-        if (value instanceof Number number) {
-            return number.longValue();
-        }
-        if (value instanceof Date date) {
-            return date.getTime();
-        }
-
+        if (value instanceof Number n) return n.longValue();
+        if (value instanceof Date d)   return d.getTime();
         String text = String.valueOf(value).trim();
-        if (text.isEmpty() || "null".equalsIgnoreCase(text) || "x".equalsIgnoreCase(text)) {
-            return null;
-        }
-
-        try {
-            return Long.parseLong(text);
-        } catch (NumberFormatException ignored) {
-        }
-
-        try {
-            return Date.from(OffsetDateTime.parse(text).toInstant()).getTime();
-        } catch (Exception ignored) {
-        }
-
-        try {
-            return new Date(text).getTime();
-        } catch (Exception ignored) {
-            return null;
-        }
-    }
-
-    private String normalizeText(Object value) {
-        if (value == null) return null;
-        String text = String.valueOf(value).trim();
-        if (text.isEmpty() || "null".equalsIgnoreCase(text) || "x".equalsIgnoreCase(text)) {
-            return null;
-        }
-        return text;
-    }
-
-    private String normalizeDigits(Object value) {
-        String text = normalizeText(value);
-        if (text == null) return null;
-        String digits = text.replaceAll("\\D+", "");
-        return digits.isEmpty() ? null : digits;
-    }
-
-    private boolean isMeaningfulValue(Object value) {
-        if (value == null) return false;
-        if (value instanceof String text) {
-            return !text.trim().isEmpty() && !"null".equalsIgnoreCase(text.trim());
-        }
-        return true;
-    }
-
-    private Map<String, Long> buildPaymentAmounts(List<Map<String, Object>> clients) {
-        Map<String, Long> paymentAmounts = new LinkedHashMap<>();
-        for (String key : List.of("efectivo", "credito", "prepago", "qr", "debito", "scaneo", "S/Cargo", "otros")) {
-            paymentAmounts.put(key, 0L);
-        }
-
-        for (Map<String, Object> client : clients) {
-            String method = String.valueOf(client.getOrDefault("paymentMethod", "otros"));
-            long amount = 0L;
-            try {
-                amount = Long.parseLong(String.valueOf(client.getOrDefault("price", 0)));
-            } catch (Exception ignored) {}
-
-            String lower = method.toLowerCase();
-            String key = switch (lower) {
-                case "efectivo" -> "efectivo";
-                case "credito" -> "credito";
-                case "prepago" -> "prepago";
-                case "qr" -> "qr";
-                case "debito" -> "debito";
-                case "scaneo" -> "scaneo";
-                default -> "S/Cargo".equals(method) ? "S/Cargo" : "otros";
-            };
-
-            paymentAmounts.put(key, paymentAmounts.get(key) + amount);
-        }
-
-        return paymentAmounts;
-    }
-
-    private Map<String, Integer> buildTimeStats(List<Map<String, Object>> clients) {
-        Map<String, Integer> stats = new LinkedHashMap<>();
-        stats.put("under1h", 0);
-        stats.put("between1h3h", 0);
-        stats.put("over3h", 0);
-
-        long now = System.currentTimeMillis();
-        for (Map<String, Object> client : clients) {
-            Long entryTs = normalizeEpoch(client.get("entryTimestamp"));
-            if (entryTs == null) continue;
-            Long exitTs = normalizeEpoch(client.get("exitTimestamp"));
-            // Use actual exit time when available; fall back to now for still-active clients
-            long endTs = (exitTs != null && exitTs > entryTs) ? exitTs : now;
-            double hours = (endTs - entryTs) / 3600000.0;
-            if (hours < 1) stats.merge("under1h", 1, Integer::sum);
-            else if (hours <= 3) stats.merge("between1h3h", 1, Integer::sum);
-            else stats.merge("over3h", 1, Integer::sum);
-        }
-
-        return stats;
-    }
-
-    private List<Map<String, Object>> buildSubsueloStats(List<Subsuelo> subsuelos, List<Space> spaces) {
-        Map<String, int[]> accumulator = new LinkedHashMap<>();
-        for (Subsuelo subsuelo : subsuelos) {
-            accumulator.put(subsuelo.getId(), new int[]{0, 0});
-        }
-
-        for (Space space : spaces) {
-            String subsueloId = space.getSubsueloId();
-            if (subsueloId == null) continue;
-            int[] counts = accumulator.computeIfAbsent(subsueloId, ignored -> new int[]{0, 0});
-            counts[0] += 1;
-            if (space.isOccupied()) {
-                counts[1] += 1;
-            }
-        }
-
-        List<Map<String, Object>> result = new ArrayList<>();
-        for (Subsuelo subsuelo : subsuelos) {
-            int[] counts = accumulator.getOrDefault(subsuelo.getId(), new int[]{0, 0});
-            int total = counts[0];
-            int occupied = counts[1];
-            int free = total - occupied;
-            int occupancyRate = total > 0 ? Math.round((occupied * 100f) / total) : 0;
-
-            Map<String, Object> row = new LinkedHashMap<>();
-            row.put("id", subsuelo.getId());
-            row.put("label", subsuelo.getLabel());
-            row.put("total", total);
-            row.put("occupied", occupied);
-            row.put("free", free);
-            row.put("occupancyRate", occupancyRate);
-            result.add(row);
-        }
-        return result;
+        if (text.isEmpty() || "null".equalsIgnoreCase(text)) return null;
+        try { return Long.parseLong(text); } catch (NumberFormatException ignored) {}
+        try { return Date.from(OffsetDateTime.parse(text).toInstant()).getTime(); } catch (Exception ignored) {}
+        try { return new Date(text).getTime(); } catch (Exception ignored) { return null; }
     }
 }

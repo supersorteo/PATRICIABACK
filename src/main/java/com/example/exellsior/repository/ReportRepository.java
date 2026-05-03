@@ -20,6 +20,14 @@ public interface ReportRepository extends JpaRepository<Report, Long> {
     List<Report> findByPeriodTypeAndPeriodKeyStartingWithAndDailyFinalTrue(String periodType, String periodPrefix);
     List<Report> findAllByPeriodTypeAndPeriodKey(String periodType, String periodKey);
 
+    List<Report> findByReportTypeIsNull();
+
+    List<Report> findByPeriodTypeAndPeriodKeyStartingWithAndReportType(
+            String periodType, String periodKeyPrefix, String reportType);
+
+    Optional<Report> findByPeriodTypeAndPeriodKeyAndReportType(
+            String periodType, String periodKey, String reportType);
+
     @Query("SELECT r FROM Report r WHERE r.periodType = 'DAILY' AND r.dailyFinal = true AND r.periodKey BETWEEN :from AND :to ORDER BY r.periodKey ASC")
     List<Report> findFinalDailyByPeriodKeyRange(@Param("from") String from, @Param("to") String to);
 

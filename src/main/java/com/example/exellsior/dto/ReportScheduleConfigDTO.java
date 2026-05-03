@@ -7,13 +7,19 @@ import java.time.LocalDate;
 public record ReportScheduleConfigDTO(
         boolean enabled,
         String dailySnapshotTime,
-        LocalDate lastSnapshotDay
+        String businessTimeZone,
+        String dailyCloseTime,
+        LocalDate lastSnapshotDay,
+        LocalDate lastCloseDay
 ) {
     public static ReportScheduleConfigDTO from(ReportScheduleSettings settings) {
         return new ReportScheduleConfigDTO(
                 settings != null && settings.isEnabled(),
                 settings != null ? settings.getDailySnapshotTime() : null,
-                settings != null ? settings.getLastSnapshotDay() : null
+                settings != null ? settings.getBusinessTimeZone() : null,
+                settings != null ? settings.getDailyCloseTime() : null,
+                settings != null ? settings.getLastSnapshotDay() : null,
+                settings != null ? settings.getLastCloseDay() : null
         );
     }
 }

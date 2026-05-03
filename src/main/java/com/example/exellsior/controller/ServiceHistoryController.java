@@ -5,6 +5,7 @@ import com.example.exellsior.services.ServiceHistoryService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -18,6 +19,12 @@ public class ServiceHistoryController {
 
     @Autowired
     private ServiceHistoryService serviceHistoryService;
+
+    @PostMapping("/reset")
+    public ResponseEntity<Void> resetAll() {
+        serviceHistoryService.deleteAll();
+        return ResponseEntity.ok().build();
+    }
 
     @GetMapping("/by-date-range")
     public ResponseEntity<List<ServiceHistoryDTO>> getByDateRange(

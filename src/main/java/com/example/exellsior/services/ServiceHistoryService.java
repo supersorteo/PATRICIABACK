@@ -17,7 +17,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
 import java.time.LocalDate;
-import java.time.ZoneId;
+import java.util.Collection;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -27,7 +27,6 @@ import java.util.Set;
 @Service
 public class ServiceHistoryService {
 
-    private static final ZoneId ZONE = ZoneId.of("America/Argentina/Buenos_Aires");
     private static final Logger log = LoggerFactory.getLogger(ServiceHistoryService.class);
 
     @Autowired
@@ -35,6 +34,9 @@ public class ServiceHistoryService {
 
     @Autowired
     private ReportRepository reportRepository;
+
+    @Autowired
+    private OperationalTimeService operationalTimeService;
 
     private final ObjectMapper mapper = new ObjectMapper();
 
@@ -51,7 +53,7 @@ public class ServiceHistoryService {
 
         LocalDate effectiveServiceDay = serviceDay != null
                 ? serviceDay
-                : Instant.ofEpochMilli(effectiveExitTimestamp).atZone(ZONE).toLocalDate();
+                : Instant.ofEpochMilli(effectiveExitTimestamp).atZone(operationalTimeService.getBusinessZone()).toLocalDate();
 
         String serviceKey = buildServiceKey(client, entryTimestampMs, effectiveServiceDay);
 
@@ -87,12 +89,24 @@ public class ServiceHistoryService {
         return serviceHistoryRepository.findByServiceDateBetweenOrderByServiceDateDescExitTimestampDesc(from, to);
     }
 
+    @Transactional
+    public void deleteBySourceClientIds(Collection<Long> clientIds) {
+        if (clientIds == null || clientIds.isEmpty()) return;
+        serviceHistoryRepository.deleteBySourceClientIdIn(clientIds);
+    }
+
+    @Transactional
+    public void deleteAll() {
+        serviceHistoryRepository.deleteAll();
+        log.info("[SERVICE-HISTORY-RESET] Historico eliminado completamente.");
+    }
+
     @EventListener(ApplicationReadyEvent.class)
     @Transactional
     public void backfillFromDailyReportsOnStartup() {
         List<Report> dailyReports = reportRepository.findByPeriodTypeAndPeriodKeyStartingWith("DAILY", "");
         Map<LocalDate, Report> selectedReportsByDay = new LinkedHashMap<>();
-        LocalDate today = LocalDate.now(ZONE);
+        LocalDate today = LocalDate.now(operationalTimeService.getBusinessZone());
 
         for (Report report : dailyReports) {
             if (report.getPeriodKey() == null || report.getPeriodKey().isBlank()) {
@@ -106,7 +120,7 @@ public class ServiceHistoryService {
                 continue;
             }
 
-            if (serviceDay.equals(today)) {
+            if (serviceDay.isAfter(today) || serviceDay.equals(today)) {
                 continue;
             }
 

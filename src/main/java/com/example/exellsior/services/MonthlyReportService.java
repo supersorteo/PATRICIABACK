@@ -1,6 +1,7 @@
 package com.example.exellsior.services;
 
 import com.example.exellsior.entity.Report;
+import com.example.exellsior.entity.ServiceHistory;
 import com.example.exellsior.repository.ReportRepository;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
@@ -14,46 +15,66 @@ import java.time.OffsetDateTime;
 import java.time.YearMonth;
 import java.time.ZoneId;
 import java.util.*;
+import java.util.stream.Collectors;
+import java.util.Objects;
 
 @Slf4j
 @Service
 public class MonthlyReportService {
 
     @Autowired private ReportRepository reportRepository;
+    @Autowired private ServiceHistoryService serviceHistoryService;
+    @Autowired private OperationalTimeService operationalTimeService;
 
     private final ObjectMapper mapper = new ObjectMapper();
 
     public Report generateFromDailyReports(YearMonth ym) {
         String monthKey = ym.toString();
 
-        List<Report> finalDailyReports = reportRepository
-                .findByPeriodTypeAndPeriodKeyStartingWithAndDailyFinalTrue("DAILY", monthKey);
-        List<Report> allDailyReports = reportRepository
-                .findByPeriodTypeAndPeriodKeyStartingWith("DAILY", monthKey);
+        // Solo reportes DAY_CLOSE son fuente autoritativa para el mensual
+        List<Report> dayCloseReports = reportRepository
+                .findByPeriodTypeAndPeriodKeyStartingWithAndReportType("DAILY", monthKey, "DAY_CLOSE");
 
-        Map<String, Report> latestAnyByDay = new HashMap<>();
-        for (Report r : allDailyReports) {
+        Map<String, Report> selectedByDay = new HashMap<>();
+        for (Report r : dayCloseReports) {
             if (r == null || r.getPeriodKey() == null) continue;
-            Report cur = latestAnyByDay.get(r.getPeriodKey());
+            Report cur = selectedByDay.get(r.getPeriodKey());
             if (cur == null || parseTs(r.getTimestamp()).isAfter(parseTs(cur.getTimestamp()))) {
-                latestAnyByDay.put(r.getPeriodKey(), r);
+                selectedByDay.put(r.getPeriodKey(), r);
             }
         }
-
-        Map<String, Report> finalByDay = new HashMap<>();
-        for (Report r : finalDailyReports) {
-            if (r == null || r.getPeriodKey() == null) continue;
-            Report cur = finalByDay.get(r.getPeriodKey());
-            if (cur == null || parseTs(r.getTimestamp()).isAfter(parseTs(cur.getTimestamp()))) {
-                finalByDay.put(r.getPeriodKey(), r);
-            }
-        }
-
-        Map<String, Report> selectedByDay = new HashMap<>(latestAnyByDay);
-        finalByDay.forEach(selectedByDay::put);
 
         List<Report> dailyReports = new ArrayList<>(selectedByDay.values());
         dailyReports.sort(Comparator.comparing(Report::getTimestamp, Comparator.nullsLast(String::compareTo)));
+
+        // Días del mes sin reporte → llenar desde ServiceHistory
+        ZoneId zone = operationalTimeService.getBusinessZone();
+        LocalDate monthStart = ym.atDay(1);
+        LocalDate monthEnd   = ym.atEndOfMonth();
+        LocalDate today      = LocalDate.now(zone);
+        LocalDate inclusiveEnd = monthEnd.isAfter(today) ? today : monthEnd;
+
+        Set<LocalDate> daysWithReport = selectedByDay.keySet().stream()
+                .map(k -> { try { return LocalDate.parse(k); } catch (Exception e) { return null; } })
+                .filter(Objects::nonNull)
+                .collect(Collectors.toSet());
+
+        List<LocalDate> gapDays = monthStart.datesUntil(inclusiveEnd.plusDays(1))
+                .filter(d -> !daysWithReport.contains(d))
+                .collect(Collectors.toList());
+
+        Map<LocalDate, List<ServiceHistory>> gapHistories = new LinkedHashMap<>();
+        if (!gapDays.isEmpty()) {
+            LocalDate gapFrom = gapDays.stream().min(Comparator.naturalOrder()).orElse(monthStart);
+            LocalDate gapTo   = gapDays.stream().max(Comparator.naturalOrder()).orElse(inclusiveEnd);
+            serviceHistoryService.getByDateRange(gapFrom, gapTo).stream()
+                    .filter(h -> gapDays.contains(h.getServiceDate()))
+                    .forEach(h -> gapHistories.computeIfAbsent(h.getServiceDate(), k -> new ArrayList<>()).add(h));
+            if (!gapHistories.isEmpty()) {
+                log.info("[MONTHLY] {} dia(s) sin reporte cubiertos por ServiceHistory: {}",
+                        gapHistories.size(), gapHistories.keySet());
+            }
+        }
 
         List<Map<String, Object>> monthlyClients = new ArrayList<>();
         Map<String, Long> paymentAmounts = new LinkedHashMap<>();
@@ -108,6 +129,36 @@ public class MonthlyReportService {
             occupancySamples += 1;
         }
 
+        // Agregar servicios de días sin reporte (desde ServiceHistory)
+        for (List<ServiceHistory> histories : gapHistories.values()) {
+            for (ServiceHistory h : histories) {
+                monthlyClients.add(serviceHistoryToMap(h));
+
+                long amount = h.getPrice() != null ? h.getPrice().longValue() : 0L;
+                String raw = h.getPaymentMethod();
+                String key = raw == null ? "otros" : switch (raw.toLowerCase()) {
+                    case "efectivo" -> "efectivo";
+                    case "credito"  -> "credito";
+                    case "prepago"  -> "prepago";
+                    case "qr"       -> "qr";
+                    case "debito"   -> "debito";
+                    case "scaneo"   -> "scaneo";
+                    default -> "S/Cargo".equals(raw) ? "S/Cargo" : "otros";
+                };
+                paymentAmounts.put(key, paymentAmounts.getOrDefault(key, 0L) + amount);
+                totalCobrado += amount;
+
+                Long entryTs = h.getEntryTimestamp();
+                Long exitTs  = h.getExitTimestamp();
+                if (entryTs != null && exitTs != null && exitTs > entryTs) {
+                    double hours = (exitTs - entryTs) / 3600000.0;
+                    if (hours < 1)        timeStats.merge("under1h",      1, Integer::sum);
+                    else if (hours <= 3)  timeStats.merge("between1h3h",  1, Integer::sum);
+                    else                  timeStats.merge("over3h",        1, Integer::sum);
+                }
+            }
+        }
+
         int occupiedSpaces = occupancySamples > 0 ? Math.round(occupiedSpacesSum / (float) occupancySamples) : 0;
         int freeSpaces = occupancySamples > 0 ? Math.round(freeSpacesSum / (float) occupancySamples) : 0;
         int occupancyRate = occupancySamples > 0 ? Math.round(occupancyRateSum / (float) occupancySamples) : 0;
@@ -117,7 +168,7 @@ public class MonthlyReportService {
                 .findByPeriodTypeAndPeriodKey("MONTHLY", monthKey)
                 .orElse(new Report());
 
-        monthly.setTimestamp(OffsetDateTime.now(ZoneId.of("America/Argentina/Buenos_Aires")).toString());
+        monthly.setTimestamp(OffsetDateTime.now(operationalTimeService.getBusinessZone()).toString());
         monthly.setPeriodType("MONTHLY");
         monthly.setPeriodKey(monthKey);
         monthly.setDailyFinal(false);
@@ -140,7 +191,7 @@ public class MonthlyReportService {
     }
 
     public void autoMonthlyEndOfMonth() {
-        ZoneId zone = ZoneId.of("America/Argentina/Buenos_Aires");
+        ZoneId zone = operationalTimeService.getBusinessZone();
         LocalDate now = LocalDate.now(zone);
         boolean isEndOfMonth = now.getMonthValue() != now.plusDays(1).getMonthValue();
         log.info("[MONTHLY-CHECK] now={} isEndOfMonth={}", now, isEndOfMonth);
@@ -148,6 +199,28 @@ public class MonthlyReportService {
         YearMonth ym = YearMonth.from(now);
         log.info("[MONTHLY-GENERATE] Generando mensual para {}", ym);
         generateFromDailyReports(ym);
+    }
+
+    private Map<String, Object> serviceHistoryToMap(ServiceHistory h) {
+        Map<String, Object> row = new LinkedHashMap<>();
+        row.put("id",             h.getSourceClientId());
+        row.put("code",           h.getCode());
+        row.put("name",           h.getName());
+        row.put("dni",            h.getDni());
+        row.put("phoneIntl",      h.getPhoneIntl());
+        row.put("phoneRaw",       h.getPhoneRaw());
+        row.put("plate",          h.getPlate());
+        row.put("notes",          h.getNotes());
+        row.put("spaceKey",       h.getSpaceKey());
+        row.put("vehicle",        h.getVehicle());
+        row.put("category",       h.getCategory());
+        row.put("price",          h.getPrice());
+        row.put("paymentMethod",  h.getPaymentMethod());
+        row.put("clover",         h.getClover());
+        row.put("entryTimestamp", h.getEntryTimestamp());
+        row.put("exitTimestamp",  h.getExitTimestamp());
+        row.put("spaceDisplayName", h.getSpaceKey() != null ? h.getSpaceKey() : "-");
+        return row;
     }
 
     private OffsetDateTime parseTs(String ts) {

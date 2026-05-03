@@ -9,6 +9,7 @@ com\example\exellsior\repository\ServiceHistoryRepository.class
 com\example\exellsior\services\SpaceService.class
 com\example\exellsior\repository\ReportRepository.class
 com\example\exellsior\repository\ClientVehicleRepository.class
+com\example\exellsior\services\OperationalTimeService.class
 com\example\exellsior\exception\GlobalExceptionHandler.class
 com\example\exellsior\services\ReportScheduleService.class
 com\example\exellsior\entity\ClientVehicle.class
@@ -30,6 +31,7 @@ com\example\exellsior\repository\SpaceRepository.class
 com\example\exellsior\services\ReportService.class
 com\example\exellsior\dto\ClientDTO.class
 com\example\exellsior\controller\ClientController.class
+com\example\exellsior\services\DailyReportService$SpaceStats.class
 com\example\exellsior\controller\VehicleTypeController.class
 com\example\exellsior\controller\SpaceController.class
 com\example\exellsior\services\MonthlyReportService$4.class
@@ -50,7 +52,6 @@ com\example\exellsior\controller\AuthController.class
 com\example\exellsior\services\MonthlyReportService$3.class
 com\example\exellsior\entity\Space.class
 com\example\exellsior\dto\ReportScheduleConfigDTO.class
-com\example\exellsior\services\DailyReportService$1.class
 com\example\exellsior\repository\ClientRepository.class
 com\example\exellsior\configuration\VehicleTypeInitializer.class
 com\example\exellsior\services\ServiceHistoryService.class
