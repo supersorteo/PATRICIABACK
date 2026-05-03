@@ -317,6 +317,7 @@ public class ClientService {
             space.setHold(false);
             space.setClientId(null);
             space.setStartTime(null);
+            space.setWhatsappSent(false);
             space.setClient(null);
         }
 
@@ -420,6 +421,7 @@ public class ClientService {
         targetSpace.setHold(false);
         targetSpace.setClientId(client.getId());
         targetSpace.setStartTime(System.currentTimeMillis());
+        targetSpace.setWhatsappSent(false);
         spaceRepository.save(targetSpace);
 
         initializeClientAssociations(client);
@@ -439,6 +441,7 @@ public class ClientService {
         space.setHold(false);
         space.setClientId(null);
         space.setStartTime(null);
+        space.setWhatsappSent(false);
         spaceRepository.save(space);
 
         if (clientId != null) {
@@ -488,6 +491,7 @@ public class ClientService {
             space.setHold(false);
             space.setClientId(null);
             space.setStartTime(null);
+            space.setWhatsappSent(false);
             space.setClient(null); // importante para evitar referencia colgada
         }
         if (!spacesToReset.isEmpty()) {

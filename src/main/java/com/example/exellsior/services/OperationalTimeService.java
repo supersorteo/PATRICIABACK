@@ -64,6 +64,22 @@ public class OperationalTimeService {
         settingsRepository.save(settings);
     }
 
+    @Transactional
+    public void clearLastCloseDay() {
+        ReportScheduleSettings settings = getOrCreateSettings();
+        settings.setLastCloseDay(null);
+        settingsRepository.save(settings);
+    }
+
+    @Transactional
+    public void clearLastCloseDayIfMatches(LocalDate day) {
+        ReportScheduleSettings settings = getOrCreateSettings();
+        if (day != null && day.equals(settings.getLastCloseDay())) {
+            settings.setLastCloseDay(null);
+            settingsRepository.save(settings);
+        }
+    }
+
     public String normalizeBusinessTimeZone(String rawTimeZone) {
         String candidate = rawTimeZone == null ? "" : rawTimeZone.trim();
         if (candidate.isEmpty()) {

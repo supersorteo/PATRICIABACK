@@ -49,6 +49,7 @@ public class ReportScheduleService {
         String previousTime = settings.getDailySnapshotTime();
         boolean previousEnabled = settings.isEnabled();
         String previousZone = settings.getBusinessTimeZone();
+        String previousCloseTime = settings.getDailyCloseTime();
 
         String normalizedTime = operationalTimeService.normalizeTimeOrNull(dto.dailySnapshotTime());
         boolean enabled = dto.enabled() && normalizedTime != null;
@@ -68,6 +69,11 @@ public class ReportScheduleService {
         settings.setDailySnapshotTime(normalizedTime);
         settings.setEnabled(enabled);
         settings.setDailyCloseTime(normalizedCloseTime);
+        if (dto.lastCloseDay() == null || !Objects.equals(previousCloseTime, normalizedCloseTime)) {
+            settings.setLastCloseDay(null);
+        } else {
+            settings.setLastCloseDay(dto.lastCloseDay());
+        }
         if (!enabled) {
             settings.setLastSnapshotDay(null);
         } else if (dto.lastSnapshotDay() == null

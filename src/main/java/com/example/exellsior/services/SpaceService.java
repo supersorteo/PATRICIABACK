@@ -41,6 +41,7 @@ public class SpaceService {
         existing.setClientId(updatedSpace.getClientId());
         existing.setStartTime(updatedSpace.getStartTime());
         existing.setDisplayName(updatedSpace.getDisplayName());
+        existing.setWhatsappSent(updatedSpace.isWhatsappSent());
 
         // subsueloId no se cambia desde aquí (es fijo)
         return spaceRepository.save(existing);

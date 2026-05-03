@@ -90,6 +90,12 @@ public class ReportController {
         }
     }
 
+    @DeleteMapping("/{id}/method1")
+    public ResponseEntity<Void> deleteReportMethod1(@PathVariable Long id) {
+        reportService.deleteReportMethod1(id);
+        return ResponseEntity.noContent().build();
+    }
+
 
     @PostMapping("/daily/finalize-and-close")
     public ResponseEntity<Void> finalizeDailyAndClose(@RequestParam(required = false) String day) {

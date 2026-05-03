@@ -1,0 +1,2 @@
+ALTER TABLE spaces
+    ADD COLUMN whatsapp_sent BOOLEAN NOT NULL DEFAULT FALSE AFTER display_name;

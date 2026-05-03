@@ -2,7 +2,9 @@ package com.example.exellsior.services;
 
 import com.example.exellsior.entity.Report;
 import com.example.exellsior.entity.ServiceHistory;
+import com.example.exellsior.entity.Space;
 import com.example.exellsior.repository.ReportRepository;
+import com.example.exellsior.repository.SpaceRepository;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -25,6 +27,7 @@ public class MonthlyReportService {
     @Autowired private ReportRepository reportRepository;
     @Autowired private ServiceHistoryService serviceHistoryService;
     @Autowired private OperationalTimeService operationalTimeService;
+    @Autowired private SpaceRepository spaceRepository;
 
     private final ObjectMapper mapper = new ObjectMapper();
 
@@ -101,6 +104,7 @@ public class MonthlyReportService {
                 List<Map<String, Object>> dayClients = mapper.readValue(
                         d.getFilteredClients() == null ? "[]" : d.getFilteredClients(),
                         new TypeReference<>() {});
+                dayClients.replaceAll(this::normalizeClientSpaceDisplayName);
                 monthlyClients.addAll(dayClients);
             } catch (Exception e) {
                 log.warn("[MONTHLY] Error parseando filteredClients del reporte ID {}", d.getId());
@@ -203,6 +207,7 @@ public class MonthlyReportService {
 
     private Map<String, Object> serviceHistoryToMap(ServiceHistory h) {
         Map<String, Object> row = new LinkedHashMap<>();
+        String spaceDisplayName = resolveSpaceDisplayName(h.getSpaceKey());
         row.put("id",             h.getSourceClientId());
         row.put("code",           h.getCode());
         row.put("name",           h.getName());
@@ -219,8 +224,38 @@ public class MonthlyReportService {
         row.put("clover",         h.getClover());
         row.put("entryTimestamp", h.getEntryTimestamp());
         row.put("exitTimestamp",  h.getExitTimestamp());
-        row.put("spaceDisplayName", h.getSpaceKey() != null ? h.getSpaceKey() : "-");
+        row.put("spaceDisplayName", spaceDisplayName);
         return row;
+    }
+
+    private String resolveSpaceDisplayName(String spaceKey) {
+        if (spaceKey == null || spaceKey.isBlank()) {
+            return "-";
+        }
+
+        return spaceRepository.findById(spaceKey)
+                .map(this::resolveDisplayName)
+                .orElse(spaceKey);
+    }
+
+    private String resolveDisplayName(Space space) {
+        if (space == null) {
+            return "-";
+        }
+        return space.getDisplayName() != null && !space.getDisplayName().isBlank()
+                ? space.getDisplayName()
+                : (space.getKey() != null ? space.getKey() : "-");
+    }
+
+    private Map<String, Object> normalizeClientSpaceDisplayName(Map<String, Object> row) {
+        if (row == null) {
+            return new LinkedHashMap<>();
+        }
+
+        String spaceKey = String.valueOf(row.getOrDefault("spaceKey", "")).trim();
+        Map<String, Object> normalized = new LinkedHashMap<>(row);
+        normalized.put("spaceDisplayName", resolveSpaceDisplayName(spaceKey));
+        return normalized;
     }
 
     private OffsetDateTime parseTs(String ts) {

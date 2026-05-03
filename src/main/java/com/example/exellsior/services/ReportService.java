@@ -141,6 +141,27 @@ public class ReportService {
         reportRepository.deleteById(id);
     }
 
+    @Transactional
+    public void deleteReportMethod1(Long id) {
+        Report report = reportRepository.findById(id)
+                .orElseThrow(() -> new IllegalArgumentException("Reporte no encontrado: " + id));
+
+        if (Boolean.TRUE.equals(report.getDailyFinal()) && "DAILY".equalsIgnoreCase(report.getPeriodType())) {
+            String periodKey = report.getPeriodKey();
+            if (periodKey != null && periodKey.length() >= 7) {
+                String monthKey = periodKey.substring(0, 7);
+                reportRepository.findByPeriodTypeAndPeriodKey("MONTHLY", monthKey)
+                        .ifPresent(reportRepository::delete);
+            }
+
+            try {
+                operationalTimeService.clearLastCloseDayIfMatches(LocalDate.parse(periodKey));
+            } catch (Exception ignored) {}
+        }
+
+        reportRepository.delete(report);
+    }
+
     public List<ClientDTO> getClientsFromDailyReportsByDateRange(LocalDate from, LocalDate to) {
         String fromKey = from.format(DateTimeFormatter.ISO_DATE);
         String toKey = to.format(DateTimeFormatter.ISO_DATE);

@@ -9,7 +9,8 @@ public record SpaceDTO(
         boolean hold,
         Long clientId,
         Long startTime,
-        String displayName
+        String displayName,
+        boolean whatsappSent
 ) {
     public static SpaceDTO from(Space s) {
         return new SpaceDTO(
@@ -19,7 +20,8 @@ public record SpaceDTO(
                 s.isHold(),
                 s.getClientId(),
                 s.getStartTime(),
-                s.getDisplayName()
+                s.getDisplayName(),
+                s.isWhatsappSent()
         );
     }
 }

@@ -36,6 +36,9 @@ public class Space {
     @Column(name = "display_name")
     private String displayName;
 
+    @Column(name = "whatsapp_sent", nullable = false)
+    private boolean whatsappSent = false;
+
     // Relación con subsuelo (solo para consultas, no para insertar)
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "subsuelo_id", insertable = false, updatable = false)
@@ -106,6 +109,14 @@ public class Space {
 
     public void setDisplayName(String displayName) {
         this.displayName = displayName;
+    }
+
+    public boolean isWhatsappSent() {
+        return whatsappSent;
+    }
+
+    public void setWhatsappSent(boolean whatsappSent) {
+        this.whatsappSent = whatsappSent;
     }
 
     public Subsuelo getSubsuelo() {

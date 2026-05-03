@@ -28,6 +28,14 @@ public interface ReportRepository extends JpaRepository<Report, Long> {
     Optional<Report> findByPeriodTypeAndPeriodKeyAndReportType(
             String periodType, String periodKey, String reportType);
 
+    @Query("""
+    SELECT MAX(r.periodKey)
+    FROM Report r
+    WHERE r.periodType = 'DAILY'
+      AND r.dailyFinal = true
+    """)
+    String findMaxClosedDailyPeriodKey();
+
     @Query("SELECT r FROM Report r WHERE r.periodType = 'DAILY' AND r.dailyFinal = true AND r.periodKey BETWEEN :from AND :to ORDER BY r.periodKey ASC")
     List<Report> findFinalDailyByPeriodKeyRange(@Param("from") String from, @Param("to") String to);
 

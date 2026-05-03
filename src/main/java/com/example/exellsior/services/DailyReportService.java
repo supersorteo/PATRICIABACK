@@ -82,7 +82,16 @@ public class DailyReportService {
             return;
         }
 
-        if (today.equals(maxDay(operationalTimeService.getLastCloseDay(), getLastClosedDay(zone)))) {
+        LocalDate settingsLastCloseDay = operationalTimeService.getLastCloseDay();
+        LocalDate lastClosedReportDay = getLastClosedDay();
+        LocalDate effectiveLastCloseDay = maxDay(settingsLastCloseDay, lastClosedReportDay);
+
+        log.info("[DAILY-CLOSE] Hora de cierre alcanzada. today={} nowTime={} closeTime={} zone={} settingsLastCloseDay={} lastClosedReportDay={}",
+                today, nowTime, closeTime, zone, settingsLastCloseDay, lastClosedReportDay);
+
+        if (today.equals(effectiveLastCloseDay)) {
+            log.info("[DAILY-CLOSE] Cierre omitido para {} porque ya existe un cierre registrado hoy. effectiveLastCloseDay={}",
+                    today, effectiveLastCloseDay);
             return;
         }
 
@@ -94,7 +103,7 @@ public class DailyReportService {
         ZoneId zone = operationalTimeService.getBusinessZone();
         LocalDate today = LocalDate.now(zone);
         LocalDate yesterday = today.minusDays(1);
-        LocalDate lastClosedDay = maxDay(operationalTimeService.getLastCloseDay(), getLastClosedDay(zone));
+        LocalDate lastClosedDay = maxDay(operationalTimeService.getLastCloseDay(), getLastClosedDay());
         LocalDate startDay = (lastClosedDay == null) ? yesterday : lastClosedDay.plusDays(1);
 
         if (startDay.isAfter(yesterday)) {
@@ -274,6 +283,7 @@ public class DailyReportService {
 
     private Map<String, Object> serviceHistoryToMap(ServiceHistory h) {
         Map<String, Object> row = new LinkedHashMap<>();
+        String spaceDisplayName = resolveSpaceDisplayName(h.getSpaceKey());
         row.put("id",             h.getSourceClientId());
         row.put("code",           h.getCode());
         row.put("name",           h.getName());
@@ -290,7 +300,7 @@ public class DailyReportService {
         row.put("clover",         h.getClover());
         row.put("entryTimestamp", h.getEntryTimestamp());
         row.put("exitTimestamp",  h.getExitTimestamp());
-        row.put("spaceDisplayName", h.getSpaceKey() != null ? h.getSpaceKey() : "-");
+        row.put("spaceDisplayName", spaceDisplayName);
         return row;
     }
 
@@ -334,6 +344,12 @@ public class DailyReportService {
     }
 
     private List<Map<String, Object>> snapshotClients(List<Client> clients) {
+        Map<String, String> spaceNames = buildSpaceDisplayNameLookup(
+                clients.stream()
+                        .map(Client::getSpaceKey)
+                        .filter(Objects::nonNull)
+                        .collect(Collectors.toSet())
+        );
         List<Map<String, Object>> result = new ArrayList<>();
         for (Client c : clients) {
             Map<String, Object> row = new LinkedHashMap<>();
@@ -353,10 +369,44 @@ public class DailyReportService {
             row.put("clover",         c.getClover());
             row.put("entryTimestamp", c.getEntryTimestamp() != null ? c.getEntryTimestamp().getTime() : null);
             row.put("exitTimestamp",  c.getExitTimestamp());
-            row.put("spaceDisplayName", c.getSpaceKey() != null ? c.getSpaceKey() : "-");
+            row.put("spaceDisplayName", spaceNames.getOrDefault(c.getSpaceKey(), c.getSpaceKey() != null ? c.getSpaceKey() : "-"));
             result.add(row);
         }
         return result;
+    }
+
+    private Map<String, String> buildSpaceDisplayNameLookup(Collection<String> spaceKeys) {
+        if (spaceKeys == null || spaceKeys.isEmpty()) {
+            return Map.of();
+        }
+
+        Map<String, String> lookup = new HashMap<>();
+        for (Space space : spaceRepository.findAllById(spaceKeys)) {
+            if (space == null || space.getKey() == null) {
+                continue;
+            }
+            lookup.put(space.getKey(), resolveDisplayName(space));
+        }
+        return lookup;
+    }
+
+    private String resolveSpaceDisplayName(String spaceKey) {
+        if (spaceKey == null || spaceKey.isBlank()) {
+            return "-";
+        }
+
+        return spaceRepository.findById(spaceKey)
+                .map(this::resolveDisplayName)
+                .orElse(spaceKey);
+    }
+
+    private String resolveDisplayName(Space space) {
+        if (space == null) {
+            return "-";
+        }
+        return space.getDisplayName() != null && !space.getDisplayName().isBlank()
+                ? space.getDisplayName()
+                : (space.getKey() != null ? space.getKey() : "-");
     }
 
     private Map<String, Long> buildPaymentAmounts(List<Map<String, Object>> clients) {
@@ -431,10 +481,18 @@ public class DailyReportService {
 
     // ─── PRIVATE: UTILS ──────────────────────────────────────────────────────
 
-    private LocalDate getLastClosedDay(ZoneId zone) {
-        Long ms = clientRepository.findMaxLastDayClosed();
-        if (ms == null || ms <= 0L) return null;
-        return new Date(ms).toInstant().atZone(zone).toLocalDate();
+    private LocalDate getLastClosedDay() {
+        String periodKey = reportRepository.findMaxClosedDailyPeriodKey();
+        if (periodKey == null || periodKey.isBlank()) {
+            return null;
+        }
+
+        try {
+            return LocalDate.parse(periodKey);
+        } catch (Exception ex) {
+            log.warn("[DAILY-CLOSE] No se pudo parsear periodKey del ultimo cierre diario: {}", periodKey);
+            return null;
+        }
     }
 
     private LocalDate maxDay(LocalDate left, LocalDate right) {
