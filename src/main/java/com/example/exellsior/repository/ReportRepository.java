@@ -42,7 +42,7 @@ public interface ReportRepository extends JpaRepository<Report, Long> {
     @Query("""
     SELECT r
     FROM Report r
-    WHERE (:periodType IS NULL OR TRIM(:periodType) = '' OR UPPER(r.periodType) = UPPER(TRIM(:periodType)))
+    WHERE (:reportType IS NULL OR TRIM(:reportType) = '' OR UPPER(r.reportType) = UPPER(TRIM(:reportType)))
       AND (:dateFrom IS NULL OR TRIM(:dateFrom) = '' OR
            CASE WHEN r.periodType = 'MONTHLY' THEN CONCAT(COALESCE(r.periodKey, ''), '-01')
                 ELSE COALESCE(r.periodKey, '') END >= TRIM(:dateFrom))
@@ -52,7 +52,7 @@ public interface ReportRepository extends JpaRepository<Report, Long> {
     ORDER BY r.id DESC
     """)
     Page<Report> findPageByFilters(
-            @Param("periodType") String periodType,
+            @Param("reportType") String reportType,
             @Param("dateFrom") String dateFrom,
             @Param("dateTo") String dateTo,
             Pageable pageable

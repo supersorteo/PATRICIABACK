@@ -67,11 +67,11 @@ public class ReportController {
     public ResponseEntity<PagedResponse<Report>> getReportsPage(
             @RequestParam(defaultValue = "0") Integer page,
             @RequestParam(defaultValue = "20") Integer size,
-            @RequestParam(required = false) String periodType,
+            @RequestParam(required = false) String reportType,
             @RequestParam(required = false) String dateFrom,
             @RequestParam(required = false) String dateTo
     ) {
-        return ResponseEntity.ok(reportService.getReportsPage(periodType, dateFrom, dateTo, page, size));
+        return ResponseEntity.ok(reportService.getReportsPage(reportType, dateFrom, dateTo, page, size));
     }
 
     @GetMapping("/{id}")
