@@ -109,13 +109,14 @@ public class ReportService {
         return reportRepository.findAll();
     }
 
-    public PagedResponse<Report> getReportsPage(String periodType, String search, Integer page, Integer size) {
+    public PagedResponse<Report> getReportsPage(String periodType, String dateFrom, String dateTo, Integer page, Integer size) {
         int safePage = Math.max(page != null ? page : 0, 0);
         int safeSize = Math.min(Math.max(size != null ? size : 20, 1), 100);
         Page<Report> result = reportRepository.findPageByFilters(
                 periodType != null ? periodType.trim() : "",
-                search != null ? search.trim() : "",
-                PageRequest.of(safePage, safeSize, Sort.by(Sort.Direction.DESC, "id"))
+                dateFrom != null ? dateFrom.trim() : "",
+                dateTo != null ? dateTo.trim() : "",
+                PageRequest.of(safePage, safeSize)
         );
         return new PagedResponse<>(result.getContent(), result.getNumber(), result.getSize(),
                 result.getTotalElements(), result.getTotalPages(), result.isFirst(), result.isLast());

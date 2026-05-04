@@ -43,16 +43,18 @@ public interface ReportRepository extends JpaRepository<Report, Long> {
     SELECT r
     FROM Report r
     WHERE (:periodType IS NULL OR TRIM(:periodType) = '' OR UPPER(r.periodType) = UPPER(TRIM(:periodType)))
-      AND (
-        :search IS NULL
-        OR TRIM(:search) = ''
-        OR LOWER(COALESCE(r.periodKey, '')) LIKE LOWER(CONCAT('%', TRIM(:search), '%'))
-        OR LOWER(COALESCE(r.timestamp, '')) LIKE LOWER(CONCAT('%', TRIM(:search), '%'))
-      )
+      AND (:dateFrom IS NULL OR TRIM(:dateFrom) = '' OR
+           CASE WHEN r.periodType = 'MONTHLY' THEN CONCAT(COALESCE(r.periodKey, ''), '-01')
+                ELSE COALESCE(r.periodKey, '') END >= TRIM(:dateFrom))
+      AND (:dateTo IS NULL OR TRIM(:dateTo) = '' OR
+           CASE WHEN r.periodType = 'MONTHLY' THEN CONCAT(COALESCE(r.periodKey, ''), '-01')
+                ELSE COALESCE(r.periodKey, '') END <= TRIM(:dateTo))
+    ORDER BY r.id DESC
     """)
     Page<Report> findPageByFilters(
             @Param("periodType") String periodType,
-            @Param("search") String search,
+            @Param("dateFrom") String dateFrom,
+            @Param("dateTo") String dateTo,
             Pageable pageable
     );
 
