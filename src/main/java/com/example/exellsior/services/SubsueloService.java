@@ -1,5 +1,6 @@
 package com.example.exellsior.services;
 
+import com.example.exellsior.entity.Space;
 import com.example.exellsior.entity.Subsuelo;
 import com.example.exellsior.repository.SpaceRepository;
 import com.example.exellsior.repository.SubsueloRepository;
@@ -18,8 +19,31 @@ public class SubsueloService {
     @Autowired
     private SpaceRepository spaceRepository;
 
+    @Transactional
     public List<Subsuelo> getAllSubsuelos() {
+        if (subsueloRepository.count() == 0) {
+            seedInitialData();
+        }
         return subsueloRepository.findAll();
+    }
+
+    private void seedInitialData() {
+        Subsuelo sub = new Subsuelo();
+        sub.setId("SUB1");
+        sub.setLabel("Subsuelo 1");
+        subsueloRepository.save(sub);
+
+        for (int i = 1; i <= 5; i++) {
+            String key = String.format("SUB1-%03d", i);
+            Space space = new Space();
+            space.setKey(key);
+            space.setSubsueloId("SUB1");
+            space.setDisplayName("Nombre " + i);
+            space.setOccupied(false);
+            space.setHold(false);
+            space.setWhatsappSent(false);
+            spaceRepository.save(space);
+        }
     }
 
     public Subsuelo getById(String id) {
