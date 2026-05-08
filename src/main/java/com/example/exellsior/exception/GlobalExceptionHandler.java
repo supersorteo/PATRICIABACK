@@ -7,6 +7,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.server.ResponseStatusException;
+import org.springframework.web.servlet.resource.NoResourceFoundException;
 
 import java.util.Map;
 
@@ -33,6 +34,12 @@ public class GlobalExceptionHandler {
         log.error("Violacion de integridad de datos", ex);
         return ResponseEntity.status(HttpStatus.CONFLICT)
                 .body(Map.of("error", "No se pudo completar la operacion por integridad de datos"));
+    }
+
+    @ExceptionHandler(NoResourceFoundException.class)
+    public ResponseEntity<Map<String, String>> handleNoResource(NoResourceFoundException ex) {
+        return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                .body(Map.of("error", "Recurso no encontrado"));
     }
 
     @ExceptionHandler(Exception.class)
