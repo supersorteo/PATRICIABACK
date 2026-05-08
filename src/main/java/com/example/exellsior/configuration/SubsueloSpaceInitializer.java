@@ -37,6 +37,7 @@ public class SubsueloSpaceInitializer {
             Space space = new Space();
             space.setKey(key);
             space.setSubsueloId("SUB1");
+            space.setDisplayName("Nombre " + i);
             space.setOccupied(false);
             space.setHold(false);
             space.setWhatsappSent(false);
