@@ -272,16 +272,13 @@ public class ClientService {
             }
         }
 
-        if (client.getClientVehicles() != null) {
-            client.getClientVehicles().clear();
-        }
-
         if (client.getId() != null) {
-            clientVehicleRepository.deleteByClientIdIn(Set.of(client.getId()));
             serviceHistoryService.deleteBySourceClientIds(Set.of(client.getId()));
         }
 
-        clientRepository.delete(client);
+        client.setSpaceKey(null);
+        client.setEntryTimestamp(null);
+        clientRepository.save(client);
     }
 
 
