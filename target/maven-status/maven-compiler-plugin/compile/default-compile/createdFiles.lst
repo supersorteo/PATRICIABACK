@@ -1,4 +1,5 @@
 com\example\exellsior\services\MonthlyReportService.class
+com\example\exellsior\configuration\SubsueloSpaceInitializer.class
 com\example\exellsior\entity\ServiceHistory.class
 com\example\exellsior\controller\SubsueloController.class
 com\example\exellsior\services\SubsueloService.class
