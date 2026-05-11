@@ -9,4 +9,5 @@ FROM eclipse-temurin:21-jre
 WORKDIR /app
 COPY --from=build /app/target/exellsior-0.0.1-SNAPSHOT.jar java-app.jar
 EXPOSE 8080
+ENV SPRING_PROFILES_ACTIVE=prod
 ENTRYPOINT ["java", "-jar", "java-app.jar"]
