@@ -3,10 +3,11 @@ package com.example.exellsior.services;
 import com.example.exellsior.entity.ReportScheduleSettings;
 import com.example.exellsior.repository.ReportScheduleSettingsRepository;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.time.LocalDate;
+import java.time.LocalDate; 
 import java.time.LocalTime;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
@@ -18,6 +19,9 @@ public class OperationalTimeService {
     public static final Long SETTINGS_ID = 1L;
     public static final String DEFAULT_DAILY_CLOSE_TIME = "23:59";
     public static final DateTimeFormatter TIME_FORMATTER = DateTimeFormatter.ofPattern("HH:mm");
+
+    @Value("${app.business.timezone:America/Argentina/Buenos_Aires}")
+    private String configuredDefaultTimezone;
 
     @Autowired
     private ReportScheduleSettingsRepository settingsRepository;
@@ -34,6 +38,22 @@ public class OperationalTimeService {
             settings.setDailyCloseTime(DEFAULT_DAILY_CLOSE_TIME);
             settings.setLastCloseDay(null);
             return settingsRepository.save(settings);
+        });
+    }
+
+    /**
+     * Corrige el timezone en BD si quedó en null, vacío, o "UTC" (timezone del servidor cloud).
+     * Se llama al arrancar la aplicación para migrar configuraciones existentes.
+     */
+    @Transactional
+    public void fixTimezoneIfNeeded() {
+        settingsRepository.findById(SETTINGS_ID).ifPresent(settings -> {
+            String tz = settings.getBusinessTimeZone();
+            boolean needsFix = tz == null || tz.isBlank() || "UTC".equals(tz);
+            if (needsFix) {
+                settings.setBusinessTimeZone(getDefaultBusinessTimeZoneId());
+                settingsRepository.save(settings);
+            }
         });
     }
 
@@ -124,6 +144,6 @@ public class OperationalTimeService {
     }
 
     private String getDefaultBusinessTimeZoneId() {
-        return ZoneId.systemDefault().getId();
+        return configuredDefaultTimezone;
     }
 }

@@ -100,6 +100,7 @@ public class DailyReportService {
 
     @EventListener(ApplicationReadyEvent.class)
     public void catchUpDailyCloseOnStartup() {
+        operationalTimeService.fixTimezoneIfNeeded();
         ZoneId zone = operationalTimeService.getBusinessZone();
         LocalDate today = LocalDate.now(zone);
         LocalDate yesterday = today.minusDays(1);

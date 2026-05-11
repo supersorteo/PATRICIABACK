@@ -237,10 +237,11 @@ public class ClientService {
                 .collect(LinkedHashSet::new, LinkedHashSet::add, LinkedHashSet::addAll);
 
         releaseSpacesForClients(clientsToDelete);
-
+ 
         if (!clientIdsToDelete.isEmpty()) {
             clientVehicleRepository.deleteByClientIdIn(clientIdsToDelete);
-            serviceHistoryService.deleteBySourceClientIds(clientIdsToDelete);
+            // ServiceHistory NO se elimina aquí: es un historial de servicios prestados,
+            // no de clientes activos. Se preserva para reportes de cierre.
         }
 
         clientsToDelete.forEach(c -> {
