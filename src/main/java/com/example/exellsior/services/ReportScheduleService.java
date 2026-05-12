@@ -58,8 +58,11 @@ public class ReportScheduleService {
                 dto.dailyCloseTime(),
                 settings.getDailyCloseTime()
         );
-        settings.setBusinessTimeZone(normalizedZone);
-        ZoneId effectiveZone = normalizedZone != null ? ZoneId.of(normalizedZone) : ZoneId.systemDefault();
+        // Solo sobreescribir si el frontend envió un timezone válido; preservar el de BD si llega null.
+        if (normalizedZone != null) {
+            settings.setBusinessTimeZone(normalizedZone);
+        }
+        ZoneId effectiveZone = ZoneId.of(operationalTimeService.getBusinessTimeZoneId());
         LocalDate today = LocalDate.now(effectiveZone);
         LocalTime nowTime = LocalTime.now(effectiveZone).withSecond(0).withNano(0);
         LocalTime configuredTime = normalizedTime != null
@@ -93,7 +96,14 @@ public class ReportScheduleService {
                 finalSaved.getDailyCloseTime(),
                 finalSaved.getLastSnapshotDay(),
                 finalSaved.getLastCloseDay());
-        return ReportScheduleConfigDTO.from(finalSaved);
+        return new ReportScheduleConfigDTO(
+                finalSaved.isEnabled(),
+                finalSaved.getDailySnapshotTime(),
+                operationalTimeService.getBusinessTimeZoneId(),
+                finalSaved.getDailyCloseTime(),
+                finalSaved.getLastSnapshotDay(),
+                finalSaved.getLastCloseDay()
+        );
     }
 
     @Scheduled(cron = "0 * * * * *")
