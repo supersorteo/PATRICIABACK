@@ -2,6 +2,7 @@ package com.example.exellsior.repository;
 
 import com.example.exellsior.entity.ServiceHistory;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
@@ -20,7 +21,9 @@ public interface ServiceHistoryRepository extends JpaRepository<ServiceHistory, 
 
     void deleteByServiceDateIn(Collection<LocalDate> serviceDates);
 
-    void deleteBySourceClientIdIn(Collection<Long> sourceClientIds);
+    @Modifying
+    @Query("DELETE FROM ServiceHistory sh WHERE sh.sourceClientId IN :ids")
+    void deleteBySourceClientIdIn(@Param("ids") Collection<Long> ids);
 
     boolean existsByServiceDate(LocalDate serviceDate);
 
