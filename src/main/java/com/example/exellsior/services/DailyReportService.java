@@ -112,6 +112,14 @@ public class DailyReportService {
             return;
         }
 
+        // BD nueva o limpiada: sin cierres previos y sin espacios activos.
+        // Marca ayer como cerrado para que futuros reinicios no generen reportes vacíos.
+        if (lastClosedDay == null && spaceRepository.countByOccupiedTrue() == 0) {
+            log.info("[DAILY-CATCHUP] BD sin historial previo ni espacios activos. Inicializando lastCloseDay={} para evitar reportes vacios.", yesterday);
+            operationalTimeService.markLastCloseDay(yesterday);
+            return;
+        }
+
         log.info("[DAILY-CATCHUP] startDay={} yesterday={}", startDay, yesterday);
 
         LocalDate day = startDay;
@@ -178,6 +186,12 @@ public class DailyReportService {
         String periodKey = day.format(DateTimeFormatter.ISO_DATE);
 
         List<ServiceHistory> histories = serviceHistoryService.getByDateRange(day, day);
+
+        if (histories.isEmpty()) {
+            log.info("[DAY-CLOSE] Sin ServiceHistory para day={}. Reporte omitido.", periodKey);
+            return null;
+        }
+
         List<Map<String, Object>> clients = histories.stream()
                 .map(this::serviceHistoryToMap)
                 .collect(Collectors.toList());
