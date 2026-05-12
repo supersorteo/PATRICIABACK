@@ -96,6 +96,17 @@ public class ServiceHistoryService {
     }
 
     @Transactional
+    public void deleteCurrentServiceForClient(Client client) {
+        if (client == null || client.getId() == null) return;
+        Long entryTimestampMs = client.getEntryTimestamp() != null ? client.getEntryTimestamp().getTime() : null;
+        LocalDate serviceDay = entryTimestampMs != null
+                ? Instant.ofEpochMilli(entryTimestampMs).atZone(operationalTimeService.getBusinessZone()).toLocalDate()
+                : LocalDate.now(operationalTimeService.getBusinessZone());
+        String serviceKey = buildServiceKey(client, entryTimestampMs, serviceDay);
+        serviceHistoryRepository.deleteByServiceKey(serviceKey);
+    }
+
+    @Transactional
     public void deleteAll() {
         serviceHistoryRepository.deleteAll();
         log.info("[SERVICE-HISTORY-RESET] Historico eliminado completamente.");

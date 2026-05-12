@@ -25,6 +25,10 @@ public interface ServiceHistoryRepository extends JpaRepository<ServiceHistory, 
     @Query("DELETE FROM ServiceHistory sh WHERE sh.sourceClientId IN :ids")
     void deleteBySourceClientIdIn(@Param("ids") Collection<Long> ids);
 
+    @Modifying
+    @Query("DELETE FROM ServiceHistory sh WHERE sh.serviceKey = :serviceKey")
+    void deleteByServiceKey(@Param("serviceKey") String serviceKey);
+
     boolean existsByServiceDate(LocalDate serviceDate);
 
     @Query("select distinct sh.serviceDate from ServiceHistory sh where sh.serviceDate in :serviceDates")

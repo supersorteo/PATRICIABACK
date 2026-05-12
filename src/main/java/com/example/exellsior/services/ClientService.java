@@ -273,11 +273,12 @@ public class ClientService {
         }
 
         if (client.getId() != null) {
-            serviceHistoryService.deleteBySourceClientIds(Set.of(client.getId()));
+            serviceHistoryService.deleteCurrentServiceForClient(client);
         }
 
         client.setSpaceKey(null);
         client.setEntryTimestamp(null);
+        client.setExitTimestamp(System.currentTimeMillis());
         clientRepository.save(client);
     }
 
