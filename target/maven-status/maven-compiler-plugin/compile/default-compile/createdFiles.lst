@@ -15,6 +15,7 @@ com\example\exellsior\exception\GlobalExceptionHandler.class
 com\example\exellsior\services\ReportScheduleService.class
 com\example\exellsior\entity\ClientVehicle.class
 com\example\exellsior\ExellsiorApplication.class
+com\example\exellsior\configuration\DefaultAdminInitializer.class
 com\example\exellsior\configuration\UserResponse.class
 com\example\exellsior\entity\Report.class
 com\example\exellsior\dto\AdminUserDTO.class
