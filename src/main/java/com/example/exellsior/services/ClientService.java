@@ -1,5 +1,7 @@
 package com.example.exellsior.services;
 
+import com.example.exellsior.dto.ClientImportItemDTO;
+import com.example.exellsior.dto.ClientImportResultDTO;
 import com.example.exellsior.dto.PagedResponse;
 import com.example.exellsior.entity.Client;
 import com.example.exellsior.entity.ClientVehicle;
@@ -123,6 +125,89 @@ public class ClientService {
         Client saved = clientRepository.save(client);
         initializeClientAssociations(saved);
         return saved;
+    }
+
+    @Transactional
+    public ClientImportResultDTO importBaseClients(List<ClientImportItemDTO> items, boolean dryRun, boolean skipExisting) {
+        List<ClientImportItemDTO> safeItems = items != null ? items : List.of();
+        ClientImportResultDTO result = new ClientImportResultDTO();
+        result.setDryRun(dryRun);
+        result.setTotalReceived(safeItems.size());
+
+        Set<String> seenKeys = new HashSet<>();
+
+        for (int i = 0; i < safeItems.size(); i++) {
+            ClientImportItemDTO rawItem = safeItems.get(i);
+            ClientImportResultDTO.RowResultDTO row = new ClientImportResultDTO.RowResultDTO();
+            row.setRowNumber(i + 1);
+            row.setLegacyId(rawItem != null ? rawItem.getLegacyId() : null);
+
+            ClientImportItemDTO normalized = normalizeImportItem(rawItem);
+            row.setName(normalized.getName());
+
+            String identityKey = buildImportIdentityKey(normalized);
+            row.setIdentityKey(identityKey);
+
+            if (normalized.getName() == null || normalized.getName().isBlank()) {
+                row.setStatus("INVALID");
+                row.setReason("El nombre es obligatorio");
+                result.setInvalid(result.getInvalid() + 1);
+                result.addRow(row);
+                continue;
+            }
+
+            if (identityKey == null) {
+                row.setStatus("INVALID");
+                row.setReason("Se requiere al menos dni, telefono o nombre válido para identificar el cliente");
+                result.setInvalid(result.getInvalid() + 1);
+                result.addRow(row);
+                continue;
+            }
+
+            if (!seenKeys.add(identityKey)) {
+                row.setStatus("SKIPPED_DUPLICATE_IN_PAYLOAD");
+                row.setReason("Duplicado dentro del archivo de importación");
+                result.setSkippedDuplicateInPayload(result.getSkippedDuplicateInPayload() + 1);
+                result.addRow(row);
+                continue;
+            }
+
+            Client existing = findExistingClientForImport(normalized);
+            if (existing != null && skipExisting) {
+                row.setStatus("SKIPPED_EXISTING");
+                row.setReason("Ya existe un cliente coincidente en la base");
+                row.setMatchedClientId(existing.getId());
+                result.setSkippedExisting(result.getSkippedExisting() + 1);
+                result.addRow(row);
+                continue;
+            }
+
+            if (dryRun) {
+                row.setStatus("WOULD_CREATE");
+                row.setReason("Validado para creación");
+                result.setCreated(result.getCreated() + 1);
+                result.addRow(row);
+                continue;
+            }
+
+            Client client = new Client();
+            client.setName(normalized.getName());
+            client.setDni(normalized.getDni());
+            client.setPhoneIntl(normalized.getPhoneIntl());
+            client.setPhoneRaw(normalized.getPhoneRaw());
+            client.setClientVehicles(resolveImportVehicles(client, normalized.getClientVehicles()));
+
+            Client saved = saveClient(client);
+
+            row.setStatus("CREATED");
+            row.setReason("Cliente creado correctamente");
+            row.setCreatedClientId(saved.getId());
+            result.setCreated(result.getCreated() + 1);
+            result.addRow(row);
+        }
+
+        result.setTotalProcessed(result.getRows().size());
+        return result;
     }
 
 
@@ -747,6 +832,114 @@ public class ClientService {
                 vehicleType.getPrice();
             }
         }
+    }
+
+    private ClientImportItemDTO normalizeImportItem(ClientImportItemDTO item) {
+        ClientImportItemDTO normalized = new ClientImportItemDTO();
+        if (item == null) {
+            return normalized;
+        }
+
+        normalized.setLegacyId(item.getLegacyId());
+        normalized.setName(normalizeText(item.getName()));
+        normalized.setDni(normalizeDigitsToNull(item.getDni()));
+        normalized.setPhoneIntl(normalizeText(item.getPhoneIntl()));
+        normalized.setPhoneRaw(normalizeDigitsToNull(item.getPhoneRaw()));
+        normalized.setClientVehicles(item.getClientVehicles());
+        return normalized;
+    }
+
+    private String buildImportIdentityKey(ClientImportItemDTO item) {
+        if (item == null) return null;
+
+        if (item.getDni() != null && !item.getDni().isBlank()) {
+            return "dni:" + item.getDni();
+        }
+
+        String phoneIntlDigits = normalizeDigitsToNull(item.getPhoneIntl());
+        if (phoneIntlDigits != null && !phoneIntlDigits.isBlank()) {
+            return "phone:" + phoneIntlDigits;
+        }
+
+        if (item.getPhoneRaw() != null && !item.getPhoneRaw().isBlank()) {
+            return "phone:" + item.getPhoneRaw();
+        }
+
+        if (item.getName() != null && !item.getName().isBlank()) {
+            return "name:" + item.getName().trim().toLowerCase();
+        }
+
+        return null;
+    }
+
+    private Client findExistingClientForImport(ClientImportItemDTO item) {
+        if (item == null) return null;
+
+        if (item.getDni() != null && !item.getDni().isBlank()) {
+            List<Client> byDni = clientRepository.findAllByDni(item.getDni());
+            if (!byDni.isEmpty()) {
+                return byDni.get(0);
+            }
+        }
+
+        String phoneDigits = normalizeDigitsToNull(item.getPhoneIntl());
+        if (phoneDigits == null || phoneDigits.isBlank()) {
+            phoneDigits = normalizeDigitsToNull(item.getPhoneRaw());
+        }
+        if (phoneDigits != null && !phoneDigits.isBlank()) {
+            List<Client> byPhone = clientRepository.findAllByPhoneDigits(phoneDigits);
+            if (!byPhone.isEmpty()) {
+                return byPhone.get(0);
+            }
+        }
+
+        if (item.getName() != null && !item.getName().isBlank()) {
+            List<Client> byName = clientRepository.findAllByNameIgnoreCase(item.getName());
+            if (!byName.isEmpty()) {
+                return byName.get(0);
+            }
+        }
+
+        return null;
+    }
+
+    private List<ClientVehicle> resolveImportVehicles(Client client, List<ClientImportItemDTO.ClientVehicleImportDTO> input) {
+        if (input == null || input.isEmpty()) {
+            return new ArrayList<>();
+        }
+
+        List<ClientVehicle> resolved = new ArrayList<>();
+        for (ClientImportItemDTO.ClientVehicleImportDTO vehicleItem : input) {
+            if (vehicleItem == null || vehicleItem.getVehicleTypeId() == null) {
+                continue;
+            }
+
+            VehicleType vt = vehicleTypeService.getById(vehicleItem.getVehicleTypeId());
+            ClientVehicle cv = new ClientVehicle();
+            cv.setClient(client);
+            cv.setVehicleType(vt);
+            cv.setPlate(normalizeText(vehicleItem.getPlate()));
+            cv.setNotes(normalizeText(vehicleItem.getNotes()));
+            resolved.add(cv);
+        }
+
+        if (resolved.size() > 4) {
+            throw new RuntimeException("Solo se permiten hasta 4 vehículos por cliente");
+        }
+
+        return resolved;
+    }
+
+    private String normalizeText(String value) {
+        if (value == null) return null;
+        String trimmed = value.trim().replaceAll("\\s+", " ");
+        return trimmed.isBlank() ? null : trimmed;
+    }
+
+    private String normalizeDigitsToNull(String value) {
+        if (value == null) return null;
+        String digits = value.replaceAll("\\D", "");
+        return digits.isBlank() ? null : digits;
     }
 
 }

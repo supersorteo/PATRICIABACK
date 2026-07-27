@@ -1,6 +1,8 @@
 package com.example.exellsior.controller;
 
 import com.example.exellsior.dto.ClientDTO;
+import com.example.exellsior.dto.ClientImportItemDTO;
+import com.example.exellsior.dto.ClientImportResultDTO;
 import com.example.exellsior.dto.PagedResponse;
 import com.example.exellsior.entity.Client;
 import com.example.exellsior.services.ClientService;
@@ -134,6 +136,15 @@ public class ClientController {
     public ClientDTO create(@RequestBody Client client) {
         client.setId(null);
         return ClientDTO.from(clientService.saveClient(client));
+    }
+
+    @PostMapping("/import")
+    public ResponseEntity<ClientImportResultDTO> importClients(
+            @RequestBody List<ClientImportItemDTO> clients,
+            @RequestParam(defaultValue = "true") boolean dryRun,
+            @RequestParam(defaultValue = "true") boolean skipExisting
+    ) {
+        return ResponseEntity.ok(clientService.importBaseClients(clients, dryRun, skipExisting));
     }
 
     @PutMapping("/{id}")
