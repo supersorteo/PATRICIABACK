@@ -2,6 +2,7 @@ com\example\exellsior\services\MonthlyReportService.class
 com\example\exellsior\configuration\SubsueloSpaceInitializer.class
 com\example\exellsior\entity\ServiceHistory.class
 com\example\exellsior\controller\SubsueloController.class
+com\example\exellsior\dto\ClientImportItemDTO.class
 com\example\exellsior\services\SubsueloService.class
 com\example\exellsior\dto\SpaceDTO.class
 com\example\exellsior\services\MonthlyReportService$2.class
@@ -32,11 +33,13 @@ com\example\exellsior\dto\PagedResponse.class
 com\example\exellsior\repository\SpaceRepository.class
 com\example\exellsior\services\ReportService.class
 com\example\exellsior\dto\ClientDTO.class
+com\example\exellsior\dto\ClientImportResultDTO.class
 com\example\exellsior\controller\ClientController.class
 com\example\exellsior\services\DailyReportService$SpaceStats.class
 com\example\exellsior\controller\VehicleTypeController.class
 com\example\exellsior\controller\SpaceController.class
 com\example\exellsior\services\MonthlyReportService$4.class
+com\example\exellsior\dto\ClientImportItemDTO$ClientVehicleImportDTO.class
 com\example\exellsior\entity\Subsuelo.class
 com\example\exellsior\configuration\CorsConfig$1.class
 com\example\exellsior\services\DailyReportService.class
@@ -54,6 +57,7 @@ com\example\exellsior\controller\AuthController.class
 com\example\exellsior\services\MonthlyReportService$3.class
 com\example\exellsior\entity\Space.class
 com\example\exellsior\dto\ReportScheduleConfigDTO.class
+com\example\exellsior\dto\ClientImportResultDTO$RowResultDTO.class
 com\example\exellsior\repository\ClientRepository.class
 com\example\exellsior\configuration\VehicleTypeInitializer.class
 com\example\exellsior\services\ServiceHistoryService.class

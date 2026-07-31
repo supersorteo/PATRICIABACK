@@ -13,6 +13,8 @@ D:\DANILO\PATRICIA\exellsior\exellsior\src\main\java\com\example\exellsior\contr
 D:\DANILO\PATRICIA\exellsior\exellsior\src\main\java\com\example\exellsior\controller\VehicleTypeController.java
 D:\DANILO\PATRICIA\exellsior\exellsior\src\main\java\com\example\exellsior\dto\AdminUserDTO.java
 D:\DANILO\PATRICIA\exellsior\exellsior\src\main\java\com\example\exellsior\dto\ClientDTO.java
+D:\DANILO\PATRICIA\exellsior\exellsior\src\main\java\com\example\exellsior\dto\ClientImportItemDTO.java
+D:\DANILO\PATRICIA\exellsior\exellsior\src\main\java\com\example\exellsior\dto\ClientImportResultDTO.java
 D:\DANILO\PATRICIA\exellsior\exellsior\src\main\java\com\example\exellsior\dto\PagedResponse.java
 D:\DANILO\PATRICIA\exellsior\exellsior\src\main\java\com\example\exellsior\dto\ReportScheduleConfigDTO.java
 D:\DANILO\PATRICIA\exellsior\exellsior\src\main\java\com\example\exellsior\dto\ServiceHistoryDTO.java
