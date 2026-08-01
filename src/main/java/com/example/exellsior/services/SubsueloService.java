@@ -21,24 +21,27 @@ public class SubsueloService {
 
     @Transactional
     public List<Subsuelo> getAllSubsuelos() {
-        if (subsueloRepository.count() == 0) {
-            seedInitialData();
-        }
+        ensureInitialData();
         return subsueloRepository.findAll();
     }
 
-    private void seedInitialData() {
-        Subsuelo sub = new Subsuelo();
-        sub.setId("SUB1");
-        sub.setLabel("Subsuelo 1");
-        subsueloRepository.save(sub);
+    private void ensureInitialData() {
+        Subsuelo sub = subsueloRepository.findById("SUB1").orElseGet(() -> {
+            Subsuelo newSub = new Subsuelo();
+            newSub.setId("SUB1");
+            newSub.setLabel("Subsuelo 1");
+            return subsueloRepository.save(newSub);
+        });
 
         for (int i = 1; i <= 5; i++) {
             String key = String.format("SUB1-%03d", i);
+            if (spaceRepository.existsById(key)) {
+                continue;
+            }
             Space space = new Space();
             space.setKey(key);
-            space.setSubsueloId("SUB1");
-            space.setDisplayName("Nombre " + i);
+            space.setSubsueloId(sub.getId());
+            space.setDisplayName("SERVICIO " + i);
             space.setOccupied(false);
             space.setHold(false);
             space.setWhatsappSent(false);

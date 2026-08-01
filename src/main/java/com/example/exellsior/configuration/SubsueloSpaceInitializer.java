@@ -23,27 +23,32 @@ public class SubsueloSpaceInitializer {
 
     @PostConstruct
     public void init() {
-        if (subsueloRepository.count() > 0) {
-            return;
-        }
+        ensureDefaultSubsueloAndSpaces();
+    }
 
-        Subsuelo sub = new Subsuelo();
-        sub.setId("SUB1");
-        sub.setLabel("Subsuelo 1");
-        subsueloRepository.save(sub);
+    private void ensureDefaultSubsueloAndSpaces() {
+        Subsuelo sub = subsueloRepository.findById("SUB1").orElseGet(() -> {
+            Subsuelo newSub = new Subsuelo();
+            newSub.setId("SUB1");
+            newSub.setLabel("Subsuelo 1");
+            return subsueloRepository.save(newSub);
+        });
 
         for (int i = 1; i <= 5; i++) {
             String key = String.format("SUB1-%03d", i);
+            if (spaceRepository.existsById(key)) {
+                continue;
+            }
             Space space = new Space();
             space.setKey(key);
-            space.setSubsueloId("SUB1");
-            space.setDisplayName("Nombre " + i);
+            space.setSubsueloId(sub.getId());
+            space.setDisplayName("SERVICIO " + i);
             space.setOccupied(false);
             space.setHold(false);
             space.setWhatsappSent(false);
             spaceRepository.save(space);
         }
 
-        log.info("Subsuelo inicial creado: SUB1 con 5 espacios (SUB1-001 a SUB1-005)");
+        log.info("Subsuelo base verificado: SUB1 con espacios SERVICIO 1 a SERVICIO 5");
     }
 }
